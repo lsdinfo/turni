@@ -6,13 +6,65 @@ import json
 import copy
 import shutil
 import time
-from PySide6.QtCore import Qt, QTimer, QPoint, QMarginsF, QRectF
-from PySide6.QtGui import QShortcut, QKeySequence
+from PySide6.QtCore import Qt, QTimer, QPoint, QPointF, QMarginsF, QRectF
+from PySide6.QtGui import QShortcut, QKeySequence, QPen
 from PySide6.QtGui import QPainter, QPdfWriter, QPageSize, QPageLayout
-from PySide6.QtGui import QColor, QBrush, QFont
+from PySide6.QtGui import QColor, QBrush, QFont, QCursor, QFontMetricsF
 from PySide6.QtWidgets import (QApplication, QMainWindow, QTableWidget, QTableWidgetItem,
                                QMenu, QHeaderView, QAbstractItemView, QFileDialog, QMessageBox, QInputDialog, QWidget, QVBoxLayout,
-                               QComboBox, QSpinBox)
+                               QComboBox, QSpinBox, QDialog, QListWidget, QListWidgetItem, QHBoxLayout,
+                               QPushButton, QDialogButtonBox, QLabel, QTextBrowser)
+
+APP_VERSION = "2.0"
+ABOUT_HTML = f"""
+<h2>Moreno</h2>
+<p><b>Pianificatore turni medici</b><br>U.O.C. di Anestesia e Rianimazione</p>
+<p>Versione {APP_VERSION}</p>
+<p>Sviluppato da <b>Ill.mo Software</b></p>
+<p>&copy; 2026 Ill.mo Software. Tutti i diritti riservati.</p>
+<p style="font-size:small">I dati sono salvati solo sul tuo computer (o chiavetta), nella cartella del programma.
+Il software &egrave; fornito &laquo;cos&igrave; com'&egrave;&raquo;, senza garanzie di alcun tipo.
+Verifica sempre i turni prima della stampa e della pubblicazione.</p>
+<p style="font-size:small">Realizzato con Python e Qt (PySide6).</p>
+"""
+
+MANUAL_HTML = """
+<h2>Manuale rapido</h2>
+<h3>Inserire i turni</h3>
+<ul>
+<li>Ogni medico ha due met\u00e0 per giorno: <b>in alto mattina</b>, <b>in basso pomeriggio</b>.</li>
+<li><b>Clic</b> su una casella: appare l'elenco dei turni possibili. "Altro" permette una sigla libera.</li>
+<li><b>Tasto destro</b> su un turno: elimina il turno o aggiungi/rimuovi il gettone (#).</li>
+<li>Ferie, L.104, Mal, Agg: dopo il primo giorno scegli "-" (continua) oppure trascina il mouse verso destra sui giorni successivi.</li>
+<li>Clic sulla riga grigia: aggiunge una nota al giorno (es. "Bimbi").</li>
+<li>Clic sull'intestazione di un giorno: imposta o rimuove un <b>festivo locale</b>.</li>
+</ul>
+<h3>Sigle e ore</h3>
+<ul>
+<li>Mattina da sola 7 h; pomeriggio sempre 6 h; mattina + pomeriggio 12 h; guardie (RG, AG, RN, AN) 12 h.</li>
+<li>F, L.104, Agg, Mal contano 6h20 (0 h di domenica e nei festivi); "/" (riposo) 0 h.</li>
+<li>Il gettone (#) toglie 6 h su un turno singolo, 12 h su una guardia. Obiettivo mensile: 152 h.</li>
+</ul>
+<h3>Regole automatiche</h3>
+<ul>
+<li>RM, RG, RN, U, AG e AGP non possono essere assegnati a due medici lo stesso giorno (nel menu appare il nome di chi li ha gi\u00e0).</li>
+<li>Dopo una notte (RN/AN) il giorno dopo si possono scegliere solo "/", RN, AN.</li>
+</ul>
+<h3>Controlli</h3>
+<ul>
+<li><b>Controlla copertura</b>: elenca i giorni in cui manca una guardia. Il simbolo \u26a0 compare anche sull'intestazione del giorno.</li>
+<li>Lun-ven servono RM, RG, RN, U, AGP. Sabato, domenica e festivi servono RG, RN, AG.</li>
+<li><b>Riepilogo</b>: per ogni medico guardie, festivi, gettoni, assenze, ore e differenza dalle 152 h.</li>
+<li><b>Medici</b>: aggiungi, rinomina, rimuovi o sposta i medici (vale per tutti i mesi).</li>
+</ul>
+<h3>Salvataggio e stampa</h3>
+<ul>
+<li>Il salvataggio \u00e8 automatico. Ogni mese ha il proprio file; le copie di sicurezza sono nella cartella "backup".</li>
+<li><b>Annulla (Ctrl+Z)</b> annulla l'ultima modifica.</li>
+<li><b>Esporta PDF</b>: pagina A3 orizzontale con la legenda.</li>
+<li>I file si trovano nella stessa cartella del programma: per spostare i dati basta copiare la cartella.</li>
+</ul>
+"""
 
 YEAR, MONTH = datetime.date.today().year, datetime.date.today().month
 TARGET = 152 * 60
@@ -25,7 +77,7 @@ DOCTORS = ["Momesso", "Coppo", "De Bernardo", "Deghaili", "Di Mari", "Licciardel
 DAY_GUARD = {"RG": 12, "AG": 12}
 NIGHT_GUARD = {"RN": 12, "AN": 12}
 MORNING = {"RM": 7, "U": 7, "SO": 7, "TA": 7}
-AFTERNOON = {"SOP": 6, "P": 6, "AG pom": 6}
+AFTERNOON = {"SOP": 6, "P": 6, "AGP": 6}
 PM_CODES = {*AFTERNOON, "TA"}
 FERIE = "F"
 BLOCK = ("F", "L.104", "Agg", "Mal", "/")
@@ -50,12 +102,15 @@ def day_hours(code, d):
 def fmt(m):
     return f"{m // 60}.{m % 60:02d}"
 
-UNIQUE = ("RG", "RN", "U", "AG", "AG pom")
+UNIQUE = ("RM", "RG", "RN", "AN", "U", "AG", "AGP")
+REQUIRED_WEEKDAY_ONLY = ("RM", "U", "AGP")
+REQUIRED_OFFDAY_ONLY = ("AG",)
 WD = ["LU", "MA", "ME", "GIO", "VE", "SA", "DO"]
 MESI = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio",
         "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"]
 COL_NAME, COL_FIRST = 0, 1
 NDAYS = COL_TOT = 0
+CUSTOM_HOL = {}
 
 
 def set_month(y, m):
@@ -63,15 +118,16 @@ def set_month(y, m):
     YEAR, MONTH = y, m
     NDAYS = calendar.monthrange(y, m)[1]
     COL_TOT = NDAYS + 1
+    CUSTOM_HOL.clear()
 
 
 set_month(YEAR, MONTH)
 WEEKEND = QColor("#ffffa6")
 SEPARATOR = QColor("#dddddd")
-RED, GREEN, BLUE = QColor("#e00000"), QColor("#00a000"), QColor("#0000ff")
-TEXT_COLORS = {**{k: RED for k in ("RG", "RM", "RN", "U")},
-               **{k: GREEN for k in ("AG", "AG pom", "AN", "SO", "SOP", "P")},
-               "TA": BLUE}
+RED, GREEN, BLUE, PURPLE = QColor("#e00000"), QColor("#00a000"), QColor("#0000ff"), QColor("#9000c0")
+TEXT_COLORS = {**{k: RED for k in ("RG", "RM", "RN", "AG", "AGP", "AN", "U")},
+               **{k: GREEN for k in ("SO", "SOP")},
+               "P": PURPLE, "TA": BLUE}
 
 
 def easter(y):
@@ -100,7 +156,7 @@ def holidays(y):
 
 
 def holiday_name(d):
-    return holidays(YEAR).get((MONTH, d))
+    return holidays(YEAR).get((MONTH, d)) or CUSTOM_HOL.get(d)
 
 
 def is_red(d):
@@ -116,6 +172,22 @@ def base_dir():
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.abspath(__file__))
 
+
+def doctors_file():
+    return os.path.join(base_dir(), "medici.json")
+
+
+def load_doctors():
+    try:
+        with open(doctors_file(), encoding="utf-8") as f:
+            lst = json.load(f)
+        if isinstance(lst, list) and lst.count("") == 1 and all(isinstance(x, str) for x in lst):
+            DOCTORS[:] = lst
+    except (OSError, ValueError):
+        pass
+
+
+load_doctors()
 
 BACKUP_EVERY = 600
 BACKUP_KEEP = 30
@@ -168,12 +240,8 @@ class Planner(QTableWidget):
             heads.append(f"{WD[datetime.date(YEAR, MONTH, d).weekday()]}\n{d}")
         heads.append("Ore")
         self.setHorizontalHeaderLabels(heads)
-        for d in range(1, NDAYS + 1):
-            h = self.horizontalHeaderItem(COL_FIRST + d - 1)
-            if is_red(d):
-                h.setForeground(QBrush(QColor("#e00000")))
-            if holiday_name(d):
-                h.setToolTip(holiday_name(d))
+        self.style_headers()
+        self.horizontalHeader().sectionClicked.connect(self.header_menu)
         for i, name in enumerate(DOCTORS):
             r = i * 2
             for rr in (r, r + 1):
@@ -196,6 +264,65 @@ class Planner(QTableWidget):
                 self.sep_row = r
                 continue
             self.refresh_row(i)
+
+    def missing_coverage(self):
+        present = {}
+        for (i, dd), e in self.data.items():
+            present.setdefault(dd, set()).update(c for c in (e.get("m"), e.get("p")) if c)
+        res = {}
+        for d in range(1, NDAYS + 1):
+            off = datetime.date(YEAR, MONTH, d).weekday() >= 5 or is_red(d)
+            have = present.get(d, set())
+            miss = [c for c in UNIQUE if c not in have
+                    and not (off and c in REQUIRED_WEEKDAY_ONLY)
+                    and not (not off and c in REQUIRED_OFFDAY_ONLY)]
+            if miss:
+                res[d] = miss
+        return res
+
+    def style_headers(self):
+        miss = self.missing_coverage()
+        for d in range(1, NDAYS + 1):
+            h = self.horizontalHeaderItem(COL_FIRST + d - 1)
+            h.setText(f"{WD[datetime.date(YEAR, MONTH, d).weekday()]}\n{d}" + (" \u26a0" if d in miss else ""))
+            h.setForeground(QBrush(QColor("#e00000") if is_red(d) else QColor("black")))
+            tip = holiday_name(d) or ""
+            if d in miss:
+                tip += ("\n" if tip else "") + "Manca: " + ", ".join(miss[d])
+            h.setToolTip(tip)
+
+    def header_menu(self, col):
+        if not (COL_FIRST <= col < COL_TOT):
+            return
+        d = col - COL_FIRST + 1
+        national = holidays(YEAR).get((MONTH, d))
+        menu = QMenu(self)
+        a_add = menu.addAction("Segna come festivo...")
+        a_add.setEnabled(not national)
+        a_del = menu.addAction("Rimuovi festivo locale")
+        a_del.setEnabled(d in CUSTOM_HOL)
+        act = menu.exec(QCursor.pos())
+        if act is None:
+            return
+        self.push_undo()
+        if act is a_add:
+            text, ok = QInputDialog.getText(self, "Festivo locale", "Nome (es. Santo patrono):",
+                                            text=CUSTOM_HOL.get(d, ""))
+            if not ok:
+                self.undo_stack.pop()
+                return
+            CUSTOM_HOL[d] = text.strip() or "Festivo locale"
+        else:
+            CUSTOM_HOL.pop(d, None)
+        self.refresh_holidays()
+
+    def refresh_holidays(self):
+        self.style_headers()
+        for i, name in enumerate(DOCTORS):
+            if name:
+                self.refresh_row(i)
+        self.update_counters()
+        self.save()
 
     def refresh_notes(self):
         if self.sep_row is None:
@@ -242,58 +369,102 @@ class Planner(QTableWidget):
         W, H = p.device().width(), p.device().height()
         n = sum(1 for x in DOCTORS if x)
         title_h, head_h = 60, 70
-        half = min(44, (H - title_h - head_h - 10) / (2 * n + 1))
-        unit = W / (NDAYS + 2.6 + 2.0)
+        half = min(44, (H - title_h - head_h - 10 - 26 * 6 - 44) / (2 * n + 1))
+        unit = W / (NDAYS + 2.6)
         xs = [0, unit * 2.6]
         for _ in range(NDAYS):
             xs.append(xs[-1] + unit)
-        xs.append(xs[-1] + unit * 2.0)
         p.setPen(Qt.black)
-        f = QFont("Segoe UI", 10, QFont.Bold)
+        f = QFont("Segoe UI", 16, QFont.Bold)
         p.setFont(f)
         p.drawText(QRectF(0, 0, W, title_h), Qt.AlignLeft | Qt.AlignVCenter,
                    f"U.O.C. di Anestesia e Rianimazione - {MESI[MONTH - 1].upper()} {YEAR}")
-        small = QFont("Segoe UI", 7)
-        p.setFont(small)
 
-        def cell(c, y, h, text, color=None, fg=Qt.black):
+        def cell(c, y, h, text, color=None, fg=Qt.black, maxpt=12, top=False, frame=True):
             r = QRectF(xs[c], y, xs[c + 1] - xs[c], h)
-            if color:
-                p.fillRect(r, color)
-            p.drawRect(r)
+            if frame:
+                if color:
+                    p.fillRect(r, color)
+                p.drawRect(r)
+            font = QFont("Segoe UI", maxpt, QFont.Bold)
+            lines = text.split("\n") or [""]
+            while font.pointSizeF() > 5:
+                fm = QFontMetricsF(font, p.device())
+                if (max(fm.horizontalAdvance(s) for s in lines) <= r.width() - 6
+                        and fm.height() * 0.85 * len(lines) <= r.height() - 2):
+                    break
+                font.setPointSizeF(font.pointSizeF() - 0.5)
+            p.setFont(font)
             p.setPen(fg)
-            p.drawText(r, Qt.AlignCenter, text)
+            p.drawText(r, (Qt.AlignHCenter | Qt.AlignTop) if top else Qt.AlignCenter, text)
             p.setPen(Qt.black)
 
         y = title_h
-        cell(0, y, head_h, "Medico")
+        cell(0, y, head_h, "Medico", maxpt=14)
         for d in range(1, NDAYS + 1):
             col = WEEKEND if self.weekend(d) else None
             cell(d, y, head_h, f"{WD[datetime.date(YEAR, MONTH, d).weekday()]}\n{d}", col,
-                 QColor("#e00000") if is_red(d) else Qt.black)
-        cell(COL_TOT, y, head_h, "Ore")
+                 QColor("#e00000") if is_red(d) else Qt.black, 12)
         y += head_h
         for i, name in enumerate(DOCTORS):
             if not name:
                 p.fillRect(QRectF(0, y, xs[-1], half), SEPARATOR)
                 for d, text in self.notes.items():
-                    cell(d, y, half, text, SEPARATOR)
+                    cell(d, y, half, text, SEPARATOR, maxpt=10)
                 y += half
                 continue
             r = i * 2
-            p.setFont(f)
-            cell(0, y, half * 2, name)
-            p.setFont(small)
+            cell(0, y, half * 2, name, maxpt=14)
             for d in range(1, NDAYS + 1):
                 if self.entry(i, d).get("m") in MERGED:
                     it = self.item(r, COL_FIRST + d - 1)
-                    cell(d, y, half * 2, it.text(), it.background().color(), it.foreground().color())
+                    cell(d, y, half * 2, it.text(), it.background().color(), it.foreground().color(), 12, True)
                     continue
+                e = self.entry(i, d)
                 for k in (0, 1):
                     it = self.item(r + k, COL_FIRST + d - 1)
-                    cell(d, y + k * half, half, it.text(), it.background().color(), it.foreground().color())
-            cell(COL_TOT, y, half * 2, self.item(r, COL_TOT).text())
+                    p.fillRect(QRectF(xs[d], y + k * half, xs[d + 1] - xs[d], half), it.background().color())
+                cell(d, y, half * 2, "")
+                for k in (0, 1):
+                    it = self.item(r + k, COL_FIRST + d - 1)
+                    cell(d, y + k * half, half, it.text(), None, it.foreground().color(), 12, True, False)
             y += half * 2
+        y += 20
+        red, green, blue, purple = QColor("#e00000"), QColor("#00a000"), QColor("#0000e0"), QColor("#9000c0")
+        legend = [
+            [("RG", "GUARDIA RIANIMAZIONE GIORNO (8-20)", red), ("AG mat", "GUARDIA ANESTESIA MATTINA (8-15)", red), ("P", "AMBULATORIO ANESTESIA (14-20)", purple)],
+            [("RM", "GUARDIA RIANIMAZIONE MATTINA (8-15)", red), ("AGP", "GUARDIA ANESTESIA POMERIGGIO (14-20)", red), ("TA", "TERAPIA ANTALGICA (8-15)", blue)],
+            [("RN", "GUARDIA RIANIMAZIONE NOTTE (20-8)", red), ("AN", "GUARDIA ANESTESIA NOTTE (20-8)", red), ("#", "\u201cGETTONE\u201d", Qt.black)],
+            [("U", "URGENTISTA (8-15)", red), ("SO", "SALA OPERATORIA (8-15)", green), ("F", "FERIE      (-) = continuo di ferie", Qt.black)],
+            [("AG", "GUARDIA ANESTESIA (8-20)", red), ("SOP", "SALA OPERATORIA POMERIGGIO (14-20)", green), None],
+        ]
+        lh = 26
+        fr = [0, .05, .30, .36, .62, .67, 1.0]
+        lx = [W * v for v in fr]
+
+        def lbox(x0, x1, yy, hh, text, color, bold=True, center=False):
+            rr = QRectF(x0, yy, x1 - x0, hh)
+            p.setPen(Qt.black)
+            p.drawRect(rr)
+            font = QFont("Segoe UI", 10, QFont.Bold if bold else QFont.Normal)
+            while font.pointSizeF() > 5 and QFontMetricsF(font, p.device()).horizontalAdvance(text) > rr.width() - 8:
+                font.setPointSizeF(font.pointSizeF() - 0.5)
+            p.setFont(font)
+            p.setPen(color)
+            p.drawText(rr.adjusted(4, 0, -4, 0), (Qt.AlignHCenter if center else Qt.AlignLeft) | Qt.AlignVCenter, text)
+
+        for row in legend:
+            for g, item in enumerate(row):
+                code, desc, col = item if item else ("", "", Qt.black)
+                lbox(lx[g * 2], lx[g * 2 + 1], y, lh, code, col, True, True)
+                lbox(lx[g * 2 + 1], lx[g * 2 + 2], y, lh, desc, col, code != "F")
+            y += lh
+        lbox(0, W, y, lh, "LE CASELLE DIVISE IN 2 SIGNIFICA: in alto MATTINA \u2013 in basso POMERIGGIO       -------       "
+             "SE C\u2019E\u2019 SOLO LA CASELLA SOTTO:  E\u2019 solo il turno di POMERIGGIO       -------       "
+             "LE CASELLE BIANCHE SIGNIFICANO RIPOSO/RECUPERO", Qt.black, True, True)
+        p.setPen(Qt.black)
+        p.setFont(QFont("Segoe UI", 8, QFont.Normal, True))
+        p.drawText(QRectF(0, y + lh + 2, W, 20), Qt.AlignRight | Qt.AlignTop, "Made with Moreno \u00a9")
         p.end()
 
     def weekend(self, d):
@@ -310,7 +481,7 @@ class Planner(QTableWidget):
         if self.after_night(i, d):
             return [] if e else ["/", *NIGHT_GUARD]
         if half == "m" and e.get("m") in MORNING and "p" not in e:
-            return [*AFTERNOON, "TA"]
+            return [c for c in (*AFTERNOON, "TA") if not (self.weekend(d) and c in REQUIRED_WEEKDAY_ONLY)]
         if e.get("m") in FULL or e.get("m") in BLOCK or half in e:
             return []
         opts = list(MORNING) if half == "m" else [*AFTERNOON, "TA"]
@@ -318,28 +489,17 @@ class Planner(QTableWidget):
             opts += list(DAY_GUARD) + list(NIGHT_GUARD) + list(BLOCK)
             if d > 1 and self.entry(i, d - 1).get("m") in CONTINUABLE:
                 opts.insert(0, "-")
+        if self.weekend(d):
+            opts = [o for o in opts if o not in REQUIRED_WEEKDAY_ONLY]
+        else:
+            opts = [o for o in opts if o not in REQUIRED_OFFDAY_ONLY]
         return opts
 
-    def refresh_row(self, i):
-        r = i * 2
-        total = 0
-        ngett = 0
+    def calc_row(self, i):
+        total = ngett = 0
         for d in range(1, NDAYS + 1):
             e = self.entry(i, d)
-            c = COL_FIRST + d - 1
             merged = e.get("m") in MERGED
-            self.setSpan(r, c, 2 if merged else 1, 1)
-            for half, rr in (("m", r), ("p", r + 1)):
-                it = self.item(rr, c)
-                txt = e.get(half, "")
-                if merged:
-                    shown = "-" if e.get("cont") else txt
-                    it.setText(shown + ("#" if e.get("g") else "") if half == "m" else "")
-                else:
-                    gett = half in e.get("g", ()) and txt != ""
-                    it.setText(txt + ("#" if gett else ""))
-                it.setForeground(QBrush(TEXT_COLORS.get(txt, QColor("black"))))
-                it.setBackground(QBrush(WEEKEND if self.weekend(d) else QColor("white")))
             if e.get("m") in FULL or e.get("m") in BLOCK:
                 total += day_hours(e["m"], d)
             else:
@@ -357,6 +517,27 @@ class Planner(QTableWidget):
                 ng = min(ng, 1)
             ngett += ng
             total -= ng * (HOURS[e["m"]] if merged else GETTONE_H)
+        return total, ngett
+
+    def refresh_row(self, i):
+        r = i * 2
+        for d in range(1, NDAYS + 1):
+            e = self.entry(i, d)
+            c = COL_FIRST + d - 1
+            merged = e.get("m") in MERGED
+            self.setSpan(r, c, 2 if merged else 1, 1)
+            for half, rr in (("m", r), ("p", r + 1)):
+                it = self.item(rr, c)
+                txt = e.get(half, "")
+                if merged:
+                    shown = "-" if e.get("cont") else txt
+                    it.setText(shown + ("#" if e.get("g") else "") if half == "m" else "")
+                else:
+                    gett = half in e.get("g", ()) and txt != ""
+                    it.setText(txt + ("#" if gett else ""))
+                it.setForeground(QBrush(TEXT_COLORS.get(txt, QColor("black"))))
+                it.setBackground(QBrush(WEEKEND if self.weekend(d) else QColor("white")))
+        total, ngett = self.calc_row(i)
         t = self.item(r, COL_TOT)
         t.setText(f"{fmt(total)} / {fmt(TARGET)}" + (f"\n{ngett} gettoni" if ngett else ""))
         t.setForeground(QBrush(QColor("#0a7d00" if total >= TARGET else "#000")))
@@ -365,6 +546,7 @@ class Planner(QTableWidget):
             self.save()
 
     def update_counters(self):
+        self.style_headers()
         f = self.footer
         if f is None:
             return
@@ -457,7 +639,7 @@ class Planner(QTableWidget):
         if with_prog and self.footer:
             prog = {(k, d): self.footer.item(k, COL_FIRST + d - 1).text()
                     for k in (2, 3) for d in range(1, NDAYS + 1)}
-        return copy.deepcopy(self.data), dict(self.notes), prog
+        return copy.deepcopy(self.data), dict(self.notes), prog, dict(CUSTOM_HOL)
 
     def push_undo(self, with_prog=False):
         self.undo_stack.append(self.snapshot(with_prog))
@@ -466,9 +648,12 @@ class Planner(QTableWidget):
     def undo(self):
         if not self.undo_stack:
             return False
-        data, notes, prog = self.undo_stack.pop()
+        data, notes, prog, hol = self.undo_stack.pop()
         self.ready = False
         self.data, self.notes = data, notes
+        CUSTOM_HOL.clear()
+        CUSTOM_HOL.update(hol)
+        self.style_headers()
         self.refresh_notes()
         if prog is not None:
             self.footer.blockSignals(True)
@@ -552,6 +737,7 @@ class Planner(QTableWidget):
                                          if self.programmed(k, d)}
                                   for k, code in enumerate(("SO", "SOP"))} if self.footer else {}
         out["__note__"] = {str(d): t for d, t in self.notes.items()}
+        out["__festivi__"] = {str(d): t for d, t in CUSTOM_HOL.items()}
         if path is None:
             backup(save_file())
         with open(path or save_file(), "w", encoding="utf-8") as f:
@@ -567,6 +753,9 @@ class Planner(QTableWidget):
         self.data = {}
         prog = raw.pop("__programmate__", {})
         self.notes = {int(d): t for d, t in raw.pop("__note__", {}).items() if int(d) <= NDAYS}
+        CUSTOM_HOL.clear()
+        CUSTOM_HOL.update({int(d): t for d, t in raw.pop("__festivi__", {}).items() if int(d) <= NDAYS})
+        self.style_headers()
         self.refresh_notes()
         if self.footer:
             self.footer.blockSignals(True)
@@ -581,7 +770,7 @@ class Planner(QTableWidget):
             i = DOCTORS.index(name)
             for d, e in days.items():
                 self.data[(i, int(d))] = {
-                    **{k: v for k, v in e.items() if k != "g"}, "g": set(e.get("g", []))}
+                    **{k: ("AGP" if v == "AG pom" else v) for k, v in e.items() if k != "g"}, "g": set(e.get("g", []))}
         for i, name in enumerate(DOCTORS):
             if name:
                 self.refresh_row(i)
@@ -595,7 +784,7 @@ class Planner(QTableWidget):
                 e = self.entry(i, d)
                 if half not in e:
                     return
-                if e["m"] in MERGED:
+                if e.get("m") in MERGED:
                     self.merged_menu(i, d, e, ev.globalPosition().toPoint())
                     return
                 menu = QMenu(self)
@@ -630,7 +819,660 @@ class Planner(QTableWidget):
         super().mousePressEvent(ev)
 
 
+SPECIALITA = ["ORL", "GIN", "CHIR GEN", "URO", "CHIR VASC", "ORT sala B", "ORT sala A"]
+WEEK_SCHEMA = {
+    0: {"SO": ["ORL", "CHIR GEN", "URO", "ORT sala A"], "SOP": ["URO", "ORT sala A"]},
+    1: {"SO": ["ORL", "GIN", "CHIR VASC", "ORT sala A"], "SOP": ["URO", "ORT sala A"]},
+    2: {"SO": ["CHIR GEN", "URO", "ORT sala B", "ORT sala A"], "SOP": ["URO", "ORL"]},
+    3: {"SO": ["ORL", "CHIR GEN", "URO", "ORT sala A"], "SOP": ["URO"]},
+    4: {"SO": ["ORL", "CHIR GEN", "URO", "ORT sala A"], "SOP": []},
+}
+LC = 3  # colonne etichetta del compilatore settimanale
+PDF_NAMES = {"ORL": "O.R.L.", "GIN": "GINECOLOGIA", "CHIR GEN": "CHIRURGIA", "URO": "UROLOGIA",
+             "CHIR VASC": "CHIR./VASC.", "ORT sala A": "ORTOPEDIA A", "ORT sala B": "ORTOPEDIA B"}
+WEEK_GUARDIE = ["RM", "U", "RG", "RN", "AG", "AGP", "AN"]
+WEEK_ROWS = [("RIA_M", ("RM", "RG")), ("RIA_P", ("RG",)), ("RN", ("RN",)), ("U", ("U",)), ("AG", ("AG",)),
+             ("AGP", ("AGP",)), ("AN", ("AN",)), ("P", ("P",)), ("TA", ("TA",)), ("TAP", ("TAP",))]
+WEEK_REQUIRED = ("RM", "RG", "RN", "U", "AG", "AGP", "AN")
+WEEK_LABELS = {
+    "RIA_M": "Rianimazione giorno 8-14", "RIA_P": "Rianimazione giorno 14-20", "U": "Urgenze 8-14",
+    "RN": "Gu. Rianim. notte 20-8", "AG": "Anestesia giorno 8-20", "AGP": "Anestesia pomeriggio 14-20",
+    "AN": "Gu. Anest. notte 20-8", "P": "Ambulatorio pomeriggio 14-20", "TA": "Terapia antalgica 8-14",
+    "TAP": "Terapia antalgica 14-20"}
+
+
+def week_has(c, m, p):
+    if c == "TA":
+        return m == "TA"
+    if c == "TAP":
+        return p == "TA"
+    return c in (m, p)
+GIORNI_LUNGHI = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
+
+
+def weekly_file():
+    return os.path.join(base_dir(), "turni_settimane.json")
+
+
+class WeeklyDialog(QDialog):
+    def __init__(self, parent, start):
+        super().__init__(parent)
+        self.setWindowTitle("Turno settimanale")
+        self.months = {}
+        self.store = {}
+        if os.path.exists(weekly_file()):
+            try:
+                with open(weekly_file(), encoding="utf-8") as f:
+                    self.store = json.load(f)
+            except (OSError, ValueError):
+                self.store = {}
+        self.monday = start - datetime.timedelta(days=start.weekday())
+        lay = QVBoxLayout(self)
+        top = QHBoxLayout()
+        b_prev = QPushButton("\u25c0")
+        b_next = QPushButton("\u25b6")
+        self.lbl = QLabel()
+        self.lbl.setStyleSheet("font-weight:bold;font-size:14px")
+        b_spec = QPushButton("Specialità della settimana...")
+        b_prev.clicked.connect(lambda: self.shift(-7))
+        b_next.clicked.connect(lambda: self.shift(7))
+        b_spec.clicked.connect(self.edit_specs)
+        for w in (b_prev, self.lbl, b_next):
+            top.addWidget(w)
+        top.addStretch()
+        b_reset = QPushButton("Azzera assegnazioni")
+        b_reset.clicked.connect(self.reset_assign)
+        top.addWidget(b_reset)
+        b_pdf = QPushButton("Esporta PDF")
+        b_pdf.clicked.connect(self.save_pdf)
+        top.addWidget(b_pdf)
+        top.addWidget(b_spec)
+        lay.addLayout(top)
+        self.tab = QTableWidget()
+        self.tab.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.tab.setSelectionMode(QAbstractItemView.NoSelection)
+        self.tab.cellClicked.connect(self.cell_clicked)
+        self.tab.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tab.customContextMenuRequested.connect(self.cell_menu)
+        lay.addWidget(self.tab)
+        hint = QLabel("Clic su un nome nelle righe SO / SOP per assegnarlo a una specialità o scambiarlo con un'altra.")
+        hint.setStyleSheet("color:#555")
+        lay.addWidget(hint)
+        bb = QDialogButtonBox(QDialogButtonBox.Close)
+        bb.rejected.connect(self.reject)
+        lay.addWidget(bb)
+        self.resize(1250, 760)
+        self.setWindowState(Qt.WindowMaximized)
+        self.fill()
+
+    def month_data(self, y, m):
+        if (y, m) not in self.months:
+            p = os.path.join(base_dir(), f"turni_{y}_{m:02d}.json")
+            data = {}
+            if os.path.exists(p):
+                try:
+                    with open(p, encoding="utf-8") as f:
+                        data = json.load(f)
+                except (OSError, ValueError):
+                    data = {}
+            self.months[(y, m)] = data
+        return self.months[(y, m)]
+
+    def entries(self, day):
+        raw = self.month_data(day.year, day.month)
+        out = []
+        for name, days in raw.items():
+            if name.startswith("__"):
+                continue
+            e = days.get(str(day.day))
+            if e:
+                m, p = e.get("m"), e.get("p")
+                p = "AGP" if p == "AG pom" else p
+                out.append((name, m, p))
+        return out
+
+    def is_off(self, d):
+        if d.weekday() >= 5 or (d.month, d.day) in holidays(d.year):
+            return True
+        return str(d.day) in self.month_data(d.year, d.month).get("__festivi__", {})
+
+    def expected(self, code, d):
+        off = self.is_off(d)
+        if code in ("RM", "U", "AGP"):
+            return not off
+        if code == "AG":
+            return off
+        return True
+
+    def export_pdf(self, path):
+        w = QPdfWriter(path)
+        w.setPageSize(QPageSize(QPageSize.A4))
+        w.setPageOrientation(QPageLayout.Landscape)
+        w.setPageMargins(QMarginsF(8, 8, 8, 8), QPageLayout.Millimeter)
+        w.setResolution(150)
+        self.render_sheet(w)
+
+    def render_sheet(self, dev):
+        p = QPainter(dev)
+        W, H = p.device().width(), p.device().height()
+        cyan, grey, yellow = QColor("#ccffff"), QColor("#c0c0c0"), QColor("#ffff99")
+        orange, green, red = QColor("#ffcc00"), QColor("#66ff33"), QColor("#ff0000")
+        S = W / 1280.0
+        wn, wm, wt = 60 * S, 165 * S, 85 * S
+        x0 = wn + wm + wt
+        cw = (W - x0) / 7
+        G = {r[1]: r[2] for r in self.rows if r[0] == "g"}
+        spec_rows = [r for r in self.rows if r[0] in ("SO", "SOP") and r[1] is not None]
+        todo = [r for r in self.rows if r[0] in ("SO", "SOP") and r[1] is None and any(r[2])]
+        off = [self.is_off(d) for d in self.days]
+
+        def txt(c, k):
+            return "\n".join(c[k])
+
+        # (weight) layout of rows
+        top = [("hdr", 1.7), ("ria_m", 1.5), ("ria_p", 1.0), ("rn", 1.0), ("u", 1.4), ("agp", 1.4), ("an", 1.0)]
+        spec = [(i, 1.1) for i in range(len(spec_rows))]
+        bottom = [("p", 1.5), ("ta", 1.5)] + ([("tap", 1.5)] if any(G["TAP"][k] for k in range(7)) else [])
+        gap = 0.35
+        total = sum(h for _, h in top) + sum(h for _, h in spec) + gap * 2 + sum(h for _, h in bottom) + 1.0 \
+            + sum(max(0.9, 0.5 * max(len(c) for c in r[2])) for r in todo)
+        unit = (H - 30 * S) / total
+        blk_h = {}
+
+        def box(x, y, wd, h, text, bg=None, bold=True, pt=12.0, fg=Qt.black, align=Qt.AlignCenter):
+            r = QRectF(x, y, wd, h)
+            if bg:
+                p.fillRect(r, bg)
+            if not text:
+                return
+            f = QFont("Times New Roman", 1, QFont.Bold if bold else QFont.Normal)
+            f.setPointSizeF(pt)
+            flags = int(align) | int(Qt.TextWordWrap)
+            inner = r.adjusted(3, 1, -3, -1)
+            while f.pointSizeF() > 4:
+                fm = QFontMetricsF(f, p.device())
+                longest = max(fm.horizontalAdvance(s) for s in text.replace("\n", " ").split(" "))
+                if longest <= inner.width() and fm.boundingRect(inner, flags, text).height() <= inner.height() + 1:
+                    break
+                f.setPointSizeF(f.pointSizeF() - 0.5)
+            p.setFont(f)
+            p.setPen(fg)
+            p.drawText(inner, flags, text)
+
+        def line(x1, y1, x2, y2, wd=1.0, dotted=False):
+            pen = QPen(Qt.black, wd * S * 1.4)
+            if dotted:
+                pen.setStyle(Qt.DotLine)
+                pen.setWidthF(S)
+            p.setPen(pen)
+            p.drawLine(QPointF(x1, y1), QPointF(x2, y2))
+
+        def vlines(ya, yb):
+            for k in range(8):
+                line(x0 + k * cw, ya, x0 + k * cw, yb)
+            line(wn + wm, ya, wn + wm, yb)
+
+        y = 0.0
+        # header
+        hh = 1.7 * unit
+        box(0, y, wn + wm + wt, hh, f"{MESI[self.days[0].month - 1].upper()} {self.days[0].year}", cyan, True, 20, red)
+        for k, d in enumerate(self.days):
+            fg = red if off[k] else Qt.black
+            bg = yellow if off[k] else cyan
+            box(x0 + k * cw, y, cw, hh / 2, GIORNI_LUNGHI[k], bg, off[k], 15, fg)
+            box(x0 + k * cw, y + hh / 2, cw, hh / 2, str(d.day), bg, True, 15, fg)
+        ytop = y
+        y += hh
+        # top sections
+        rg = [list(G["RIA_P"][k]) for k in range(7)]
+        rm = []
+        for k in range(7):
+            l = list(G["RIA_M"][k])
+            for n in G["RIA_P"][k]:
+                if n in l:
+                    l.remove(n)
+            rm.append(l)
+        sec = [
+            ("RIANIMAZIONE\nGIORNO", "8-14", "ria_m", 1.5, None, None),
+            ("", "14-20", "ria_p", 1.0, None, None),
+            ("GU. RIANIM. NOTTE", "20-8", "rn", 1.0, grey, None),
+            ("URGENZE", "8-14", "u", 1.4, yellow, red),
+            ("ANESTESIA\nPOMERIGGIO", "14-20", "agp", 1.4, None, None),
+            ("GU. ANEST. NOTTE", "20-8", "an", 1.0, grey, None),
+        ]
+        ys = {}
+        for lab, tm, key, wgt, bg, fg in sec:
+            h = wgt * unit
+            ys[key] = (y, h)
+            if lab:
+                span = 2 if key == "ria_m" else 1
+                hl = h + (1.0 * unit if key == "ria_m" else 0)
+                two = key in ("rn", "an", "u")
+                box(0, y, wn + wm if not two else wn + wm, hl, lab, bg, True, 14, fg or Qt.black)
+            box(wn + wm, y, wt, h, tm, bg, False, 14)
+            for k in range(7):
+                if key == "ria_m" and ("RIA_M", k) in self.ovr:
+                    t = txt(G["RIA_M"], k)
+                elif key == "ria_m":
+                    t = " – ".join(rg[k] + rm[k])
+                elif key == "ria_p":
+                    t = " – ".join(rg[k])
+                elif key == "rn":
+                    t = txt(G["RN"], k)
+                elif key == "an":
+                    t = txt(G["AN"], k)
+                elif key == "u":
+                    t = txt(G["U"], k)
+                else:
+                    t = txt(G["AGP"], k)
+                cbg = yellow if (off[k] and key in ("u", "agp", "ria_m", "ria_p")) else (grey if key in ("rn", "an") else (yellow if key == "u" else None))
+                box(x0 + k * cw, y, cw, h, t.upper(), cbg, True, 12)
+            y += h
+        yend = y
+        vlines(ytop + hh, yend)
+        for k in range(8):
+            line(x0 + k * cw, ytop, x0 + k * cw, ytop + hh)
+        for key in ("ria_m", "rn", "u", "agp", "an"):
+            ya = ys[key][0]
+            line(0, ya, W, ya, 2.2)
+        line(0, ytop, W, ytop, 2.2)
+        line(0, yend, W, yend, 2.2)
+        line(wn + wm, ys["ria_p"][0], W, ys["ria_p"][0], 1, True)
+        line(0, ytop, 0, yend, 2.2)
+        line(W, ytop, W, yend, 2.2)
+        # specialties
+        y = yend + gap * unit
+        ysp = y
+        for i in range(0, len(spec_rows), 2):
+            pair = spec_rows[i:i + 2]
+            yb = y
+            for r, (kind, label, cells) in enumerate(pair):
+                h = 1.1 * unit
+                box(wn + wm, y, wt, h, "8-14.30" if kind == "SO" else "14-20", None, False, 14)
+                for k in range(7):
+                    t = txt(cells, k)
+                    if off[k] and not t:
+                        continue
+                    box(x0 + k * cw, y, cw, h, (t or "X").upper(), orange if t else None, bool(t), 12)
+                y += h
+            n = i // 2 + 1
+            box(0, yb, wn, y - yb, str(n), None, True, 14)
+            box(wn, yb, wm, y - yb, PDF_NAMES.get(pair[0][1], pair[0][1].upper()), None, True, 14)
+            line(wn + wm, yb + (y - yb) / 2, W, yb + (y - yb) / 2, 1, True)
+            line(0, y, W, y, 2.2)
+        yspec_end = y
+        for t_r in todo:
+            h = max(0.9, 0.5 * max(len(c) for c in t_r[2])) * unit
+            box(0, y, wn + wm + wt, h, "DA ASSEGNARE " + ("MATTINA" if t_r[0] == "SO" else "POMERIGGIO"), None, True, 11, red)
+            for k in range(7):
+                box(x0 + k * cw, y, cw, h, txt(t_r[2], k).upper(), None, True, 11, red)
+            y += h
+            line(0, y, W, y, 1)
+        line(0, ysp, W, ysp, 2.2)
+        vlines(ysp, yspec_end)
+        line(wn, ysp, wn, yspec_end)
+        for k in range(8):
+            line(x0 + k * cw, yspec_end, x0 + k * cw, y)
+        line(0, ysp, 0, y, 2.2)
+        line(W, ysp, W, y, 2.2)
+        # ambulatori
+        y += gap * unit
+        yb0 = y
+        has_tap = any(G["TAP"][k] for k in range(7))
+        for key, lab, tm, bg in (("P", "AMBULATORIO\nPOMERIGGIO", "14-20", orange), ("TA", "TERAPIA ANTALGICA", "8-14", green),
+                                 *((("TAP", "TERAPIA ANTALGICA\nPOMERIGGIO", "14-20", green),) if has_tap else ())):
+            h = 1.5 * unit
+            box(0, y, wn + wm, h, lab, bg if key != "P" else None, True, 13)
+            box(wn + wm, y, wt, h, tm, None, False, 14)
+            for k in range(7):
+                t = txt(G[key], k)
+                if off[k] and not t:
+                    continue
+                box(x0 + k * cw, y, cw, h, (t or "---").upper(), bg, True, 12)
+            y += h
+            line(0, y, W, y, 2.2 if key == ("TAP" if has_tap else "TA") else 1)
+        line(0, yb0, W, yb0, 2.2)
+        vlines(yb0, y)
+        line(0, yb0, 0, y, 2.2)
+        line(W, yb0, W, y, 2.2)
+        p.setPen(Qt.black)
+        p.setFont(QFont("Times New Roman", 11))
+        p.drawText(QRectF(0, y + 8 * S, W, 30 * S), Qt.AlignLeft | Qt.AlignVCenter, "Data ____________________")
+        p.setFont(QFont("Times New Roman", 9, QFont.Normal, True))
+        p.drawText(QRectF(0, H - 24 * S, W, 24 * S), Qt.AlignRight | Qt.AlignBottom, "Made with Moreno \u00a9")
+        p.end()
+
+    def reset_assign(self):
+        box = QMessageBox(self)
+        box.setWindowTitle("Azzera assegnazioni")
+        box.setText("Azzerare le assegnazioni alle sale di questa settimana?")
+        b_auto = box.addButton("Ripristina automatico", QMessageBox.AcceptRole)
+        b_empty = box.addButton("Svuota tutto", QMessageBox.DestructiveRole)
+        box.addButton("Annulla", QMessageBox.RejectRole)
+        box.exec()
+        w = self.week()
+        if box.clickedButton() is b_auto:
+            w.pop("assign", None)
+        elif box.clickedButton() is b_empty:
+            w["assign"] = {f"{kind}|{d.isoformat()}|{n}": "-"
+                           for kind in ("SO", "SOP") for k, d in enumerate(self.days) for n in self.pool[kind][k]}
+        else:
+            return
+        self.persist()
+        self.fill()
+
+    def save_pdf(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Esporta PDF", f"turno_settimanale_{self.monday:%Y_%m_%d}.pdf", "PDF (*.pdf)")
+        if path:
+            self.export_pdf(path)
+            os.startfile(path)
+
+    def week(self):
+        return self.store.setdefault(self.monday.isoformat(), {})
+
+    def specs(self):
+        return self.week().get("specs", list(SPECIALITA))
+
+    def spec_of(self, kind, day, name):
+        s = self.week().get("assign", {}).get(f"{kind}|{day.isoformat()}|{name}")
+        if s is None:
+            return self.auto.get((kind, day.isoformat(), name))
+        return s if s in self.specs() else None
+
+    def build_auto(self, days):
+        self.auto = {}
+        assign = self.week().get("assign", {})
+        specs = self.specs()
+        for kind in ("SO", "SOP"):
+            for k, d in enumerate(days):
+                names = self.pool[kind][k]
+                keys = {n: f"{kind}|{d.isoformat()}|{n}" for n in names}
+                occupied = {assign[keys[n]] for n in names if keys[n] in assign}
+                free = [s for s in WEEK_SCHEMA.get(d.weekday(), {}).get(kind, []) if s in specs and s not in occupied]
+                autos = [n for n in names if keys[n] not in assign]
+                for n, s in zip(autos, free):
+                    self.auto[(kind, d.isoformat(), n)] = s
+
+    def set_spec(self, kind, day, name, spec):
+        a = self.week().setdefault("assign", {})
+        a[f"{kind}|{day.isoformat()}|{name}"] = spec or "-"
+        self.persist()
+
+    def persist(self):
+        with open(weekly_file(), "w", encoding="utf-8") as f:
+            json.dump(self.store, f, ensure_ascii=False, indent=1)
+
+    def shift(self, n):
+        self.monday += datetime.timedelta(days=n)
+        self.fill()
+
+    def edit_specs(self):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Specialità della settimana")
+        lay = QVBoxLayout(dlg)
+        lst = QListWidget()
+        cur = self.specs()
+        for s in SPECIALITA:
+            it = QListWidgetItem(s)
+            it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
+            it.setCheckState(Qt.Checked if s in cur else Qt.Unchecked)
+            lst.addItem(it)
+        lay.addWidget(lst)
+        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        bb.accepted.connect(dlg.accept)
+        bb.rejected.connect(dlg.reject)
+        lay.addWidget(bb)
+        if dlg.exec() == QDialog.Accepted:
+            self.week()["specs"] = [s for k, s in enumerate(SPECIALITA) if lst.item(k).checkState() == Qt.Checked]
+            self.persist()
+            self.fill()
+
+    def fill(self):
+        mon = self.monday
+        days = [mon + datetime.timedelta(days=k) for k in range(7)]
+        self.days = days
+        self.lbl.setText(f"  Settimana dal {days[0]:%d/%m/%Y} al {days[6]:%d/%m/%Y}  ")
+        specs = self.specs()
+        ents = [self.entries(d) for d in days]
+        rows = []
+        for key, codes in WEEK_ROWS:
+            cells = []
+            for k, e in enumerate(ents):
+                names = [n for n, m, p in e if any(week_has(c, m, p) for c in codes)]
+                for c in codes:
+                    if c in WEEK_REQUIRED and self.expected(c, days[k]) and not any(week_has(c, m, p) for n, m, p in e):
+                        names.append("/" if f"{c}|{days[k].isoformat()}" in self.week().get("missing", []) else "?")
+                cells.append(names)
+            rows.append(("g", key, cells))
+        ag = next(c for kd, lb, c in rows if lb == "AG")
+        for i, (kd, lb, cells) in enumerate(rows):
+            if lb in ("U", "AGP"):
+                rows[i] = (kd, lb, [ag[k] if self.expected("AG", days[k]) else cells[k] for k in range(7)])
+        self.ag_hidden = True
+        self.pool = {}
+        for kind in ("SO", "SOP"):
+            self.pool[kind] = [[n for n, m, p in e if (m == "SO" if kind == "SO" else p == "SOP")] for e in ents]
+        self.build_auto(days)
+        for s in specs:
+            for kind in ("SO", "SOP"):
+                pool = self.pool[kind]
+                rows.append((kind, s, [[n for n in pool[k] if self.spec_of(kind, days[k], n) == s] for k in range(7)]))
+        for kind in ("SO", "SOP"):
+            pool = self.pool[kind]
+            rows.append((kind, None, [[n for n in pool[k] if self.spec_of(kind, days[k], n) is None] for k in range(7)]))
+        ov = self.week().get("override", {})
+        self.ovr = set()
+        for i, (kd, lb, cells) in enumerate(rows):
+            rk = lb if kd == "g" else f"{kd}:{lb or ''}"
+            new = []
+            for k in range(7):
+                v = ov.get(f"{rk}|{days[k].isoformat()}")
+                if v is None:
+                    new.append(cells[k])
+                else:
+                    self.ovr.add((rk, k))
+                    new.append([x.strip() for x in v.split("\n") if x.strip()])
+            rows[i] = (kd, lb, new)
+        self.rows = rows
+        t = self.tab
+        t.clear()
+        t.setRowCount(len(rows))
+        t.setColumnCount(LC + 7)
+        t.setHorizontalHeaderLabels(["", "", ""] + [f"{GIORNI_LUNGHI[k]} {d:%d/%m}" for k, d in enumerate(days)])
+        for k, d in enumerate(days):
+            if is_weekend_date(d):
+                hi = t.horizontalHeaderItem(LC + k)
+                hi.setBackground(QBrush(QColor("#ffff99")))
+                hi.setForeground(QBrush(QColor("#d00000")))
+        t.verticalHeader().hide()
+        t.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        t.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
+        t.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
+        t.setColumnWidth(0, 34)
+        t.setColumnWidth(2, 130)
+        t.verticalHeader().setDefaultSectionSize(30)
+        bold = QFont()
+        bold.setBold(True)
+        gfont = QFont()
+        gfont.setBold(True)
+        gfont.setPointSize(11)
+
+        def lab(r, c, text, bg=None, fg=None, rs=1, cs=1):
+            li = QTableWidgetItem(text)
+            li.setFont(bold)
+            li.setTextAlignment(Qt.AlignCenter)
+            li.setBackground(QBrush(QColor(bg or "#f2f2f2")))
+            if fg:
+                li.setForeground(QBrush(QColor(fg)))
+            t.setItem(r, c, li)
+            if rs > 1 or cs > 1:
+                t.setSpan(r, c, rs, cs)
+
+        t.clearSpans()
+        spec_n = 0
+        for r, (kind, label, cells) in enumerate(rows):
+            if kind == "g" and label == "AG":
+                continue
+            if kind == "g":
+                lab(r, 0, WEEK_LABELS.get(label, label), {"RN": "#c8c8c8", "AN": "#c8c8c8", "U": "#ffff99"}.get(label, "#ffffff"), cs=3)
+            elif label is None:
+                lab(r, 0, "DA ASSEGNARE " + ("MATTINA" if kind == "SO" else "POMERIGGIO"), "#ffe0e0", "#c00000", cs=3)
+            else:
+                if kind == "SO":
+                    spec_n += 1
+                    lab(r, 0, f"{spec_n}", "#dcdcdc", rs=2)
+                    lab(r, 1, PDF_NAMES.get(label, label), "#dcdcdc", rs=2)
+                lab(r, 2, "MATTINA 8-14.30" if kind == "SO" else "POMERIGGIO 14-20",
+                    "#cfe8ff" if kind == "SO" else "#ffe3b8")
+        for r, (kind, label, cells) in enumerate(rows):
+            for c in range(7):
+                txt = "\n".join(cells[c])
+                if not txt and kind in ("SO", "SOP") and label is not None:
+                    txt = "X"
+                it = QTableWidgetItem(txt)
+                if kind == "g":
+                    code = {"RIA_M": "RM", "RIA_P": "RG", "TAP": "TA"}.get(label, label)
+                    it.setForeground(QBrush(TEXT_COLORS.get(code, QColor("black"))))
+                    it.setFont(gfont)
+                    if label in ("RN", "AN"):
+                        it.setBackground(QBrush(QColor("#c8c8c8")))
+                    elif label == "U" or is_weekend_date(days[c]):
+                        it.setBackground(QBrush(QColor("#ffff99")))
+                    if "?" in cells[c]:
+                        it.setForeground(QBrush(QColor("#c00000")))
+                        it.setBackground(QBrush(QColor("#ffd0d0")))
+                elif label is None:
+                    it.setForeground(QBrush(QColor("#c00000")))
+                elif txt != "X":
+                    it.setBackground(QBrush(QColor("#ffcc00")))
+                elif is_weekend_date(days[c]):
+                    it.setBackground(QBrush(QColor("#ffffa8")))
+                it.setTextAlignment(Qt.AlignCenter)
+                if (self.row_key(r), c) in self.ovr:
+                    f = it.font()
+                    f.setUnderline(True)
+                    it.setFont(f)
+                    it.setToolTip("Modificato a mano (tasto destro per ripristinare)")
+                t.setItem(r, LC + c, it)
+            t.setRowHeight(r, max(26, 18 * max(len(x) for x in cells) + 8))
+            t.setRowHidden(r, kind == "g" and label == "AG" and self.ag_hidden)
+
+    def row_key(self, r):
+        kind, label, _cells = self.rows[r]
+        return label if kind == "g" else f"{kind}:{label or ''}"
+
+    def cell_menu(self, pos):
+        r, c = self.tab.rowAt(pos.y()), self.tab.columnAt(pos.x()) - LC
+        if r < 0 or c < 0:
+            return
+        rk, day = self.row_key(r), self.days[c]
+        key = f"{rk}|{day.isoformat()}"
+        menu = QMenu(self)
+        menu.addAction("Modifica a mano...", lambda: self.force_edit(r, c, key))
+        if (rk, c) in self.ovr:
+            menu.addAction("Ripristina valore automatico", lambda: self.force_clear(key))
+        menu.exec(QCursor.pos())
+
+    def force_edit(self, r, c, key):
+        cur = "\n".join(x for x in self.rows[r][2][c] if x not in ("?", "/"))
+        text, ok = QInputDialog.getMultiLineText(
+            self, "Modifica a mano", f"{self.days[c]:%d/%m} - un nome per riga.\nSvuota il testo per tornare al valore automatico. Scrivi - per lasciare vuoto.", cur)
+        if not ok:
+            return
+        ov = self.week().setdefault("override", {})
+        if text.strip():
+            ov[key] = text.strip()
+        else:
+            ov.pop(key, None)
+        self.persist()
+        self.fill()
+
+    def force_clear(self, key):
+        self.week().get("override", {}).pop(key, None)
+        self.persist()
+        self.fill()
+
+    def cell_clicked(self, r, c):
+        c -= LC
+        if c < 0:
+            return
+        if (self.row_key(r), c) in self.ovr:
+            return
+        kind, label, cells = self.rows[r]
+        day = self.days[c]
+        if kind == "g":
+            if label in ("U", "AGP") and self.expected("AG", day):
+                label = "AG"
+            codes = dict(WEEK_ROWS)[label]
+            ents = self.entries(day)
+            miss = [x for x in codes if x in WEEK_REQUIRED and self.expected(x, day)
+                    and not any(week_has(x, m, p) for n, m, p in ents)]
+            lst = self.week().setdefault("missing", [])
+            for x in miss:
+                key = f"{x}|{day.isoformat()}"
+                if key in lst:
+                    if QMessageBox.question(self, "Turno settimanale", f"Annullare la conferma di {x} mancante il {day:%d/%m}?") == QMessageBox.Yes:
+                        lst.remove(key)
+                else:
+                    if QMessageBox.question(self, "Turno settimanale",
+                                            f"Nel mensile manca {x} il {day:%d/%m}.\nHai verificato che siamo una persona in meno? Segno \"/\".") == QMessageBox.Yes:
+                        lst.append(key)
+            if miss:
+                self.persist()
+                self.fill()
+            return
+        if kind not in ("SO", "SOP"):
+            return
+        specs = self.specs()
+        menu = QMenu(self)
+        if not cells[c] and label is not None:
+            for n in self.rows_for(kind, None)[c]:
+                menu.addAction(f"Assegna {n}", lambda n=n: self.move(kind, day, n, label))
+            if menu.isEmpty():
+                return
+            menu.exec(QCursor.pos())
+            return
+        for name in cells[c]:
+            sub = menu.addMenu(name)
+            for s in specs + [None]:
+                if s == label:
+                    continue
+                others = self.rows_for(kind, s)[c]
+                title = s or "Da assegnare"
+                if others and s is not None:
+                    for o in others:
+                        sub.addAction(f"Scambia con {title}: {o}",
+                                      lambda n=name, o=o, s=s, l=label: self.swap(kind, day, n, l, o, s))
+                else:
+                    sub.addAction(f"Sposta in {title}", lambda n=name, s=s: self.move(kind, day, n, s))
+        menu.exec(QCursor.pos())
+
+    def rows_for(self, kind, spec):
+        for k, lab, cells in self.rows:
+            if k == kind and lab == spec:
+                return cells
+        return [[] for _ in range(7)]
+
+    def move(self, kind, day, name, spec):
+        self.set_spec(kind, day, name, spec)
+        self.fill()
+
+    def swap(self, kind, day, a, a_spec, b, b_spec):
+        self.set_spec(kind, day, a, b_spec)
+        self.set_spec(kind, day, b, a_spec)
+        self.fill()
+
+
+def is_weekend_date(d):
+    return d.weekday() >= 5
+
+
 class Win(QMainWindow):
+    def weekly(self):
+        self.table.save()
+        d = datetime.date(YEAR, MONTH, min(datetime.date.today().day, NDAYS))
+        WeeklyDialog(self, d).exec()
+
     def prog_changed(self, _it):
         self.table.update_counters()
         if self.table.ready:
@@ -692,6 +1534,8 @@ class Win(QMainWindow):
         t.ready = False
         t.data = {}
         t.notes = {}
+        CUSTOM_HOL.clear()
+        t.style_headers()
         t.refresh_notes()
         self.footer.blockSignals(True)
         for k in (2, 3):
@@ -704,6 +1548,184 @@ class Win(QMainWindow):
         t.update_counters()
         t.ready = True
         t.save()
+
+    def missing_coverage(self):
+        return self.table.missing_coverage()
+
+    def check_coverage(self):
+        res = self.missing_coverage()
+        if not res:
+            QMessageBox.information(self, "Controllo copertura", "Tutti i turni di guardia sono coperti.")
+            return
+        giorni = ("lun", "mar", "mer", "gio", "ven", "sab", "dom")
+        righe = [f"{giorni[datetime.date(YEAR, MONTH, d).weekday()]} {d}: manca {', '.join(m)}"
+                 for d, m in res.items()]
+        box = QMessageBox(self)
+        box.setWindowTitle("Controllo copertura")
+        box.setText(f"{len(res)} giorni con turni di guardia mancanti.")
+        box.setDetailedText("\n".join(righe))
+        box.setInformativeText("\n".join(righe[:15]) + ("\n..." if len(righe) > 15 else ""))
+        box.exec()
+
+    def about(self):
+        QMessageBox.about(self, "Informazioni su Moreno", ABOUT_HTML)
+
+    def manual(self):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Istruzioni")
+        lay = QVBoxLayout(dlg)
+        tb = QTextBrowser()
+        tb.setHtml(MANUAL_HTML)
+        lay.addWidget(tb)
+        bb = QDialogButtonBox(QDialogButtonBox.Close)
+        bb.rejected.connect(dlg.reject)
+        lay.addWidget(bb)
+        dlg.resize(640, 680)
+        dlg.exec()
+
+    def summary(self):
+        t = self.table
+        rows = []
+        for i, name in enumerate(DOCTORS):
+            if not name:
+                continue
+            cnt = dict.fromkeys(("RG", "AG", "RN", "AN"), 0)
+            fest = ass = 0
+            for d in range(1, NDAYS + 1):
+                e = t.entry(i, d)
+                m = e.get("m")
+                if m in cnt:
+                    cnt[m] += 1
+                if m in CONTINUABLE:
+                    ass += 1
+                elif t.weekend(d) and (m or e.get("p")) and m not in BLOCK:
+                    fest += 1
+            total, ngett = t.calc_row(i)
+            rows.append((name, cnt["RG"], cnt["AG"], cnt["RN"], cnt["AN"], fest, ngett, ass, total))
+        heads = ["Medico", "RG", "AG", "RN", "AN", "Sab/Dom/Fest", "Gettoni", "Assenze", "Ore", "Differenza"]
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Riepilogo - {MESI[MONTH - 1]} {YEAR}")
+        lay = QVBoxLayout(dlg)
+        tab = QTableWidget(len(rows), len(heads))
+        tab.setHorizontalHeaderLabels(heads)
+        tab.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        tab.verticalHeader().hide()
+        for r, row in enumerate(rows):
+            vals = [*row[:8], fmt(row[8]), fmt(row[8] - TARGET)]
+            for c, v in enumerate(vals):
+                it = QTableWidgetItem(str(v))
+                it.setTextAlignment(Qt.AlignCenter if c else Qt.AlignLeft | Qt.AlignVCenter)
+                if c == 9 and row[8] < TARGET:
+                    it.setForeground(QBrush(QColor("#e00000")))
+                tab.setItem(r, c, it)
+        tab.resizeColumnsToContents()
+        lay.addWidget(tab)
+        dlg.resize(900, 600)
+        dlg.exec()
+
+    def manage_doctors(self):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Gestione medici")
+        lay = QVBoxLayout(dlg)
+        lst = QListWidget()
+        SEP = "\u2014 separatore \u2014"
+
+        def add(name, orig):
+            it = QListWidgetItem(name or SEP)
+            it.setData(Qt.UserRole, name)
+            it.setData(Qt.UserRole + 1, orig)
+            lst.addItem(it)
+            return it
+
+        for n in DOCTORS:
+            add(n, n)
+        lay.addWidget(QLabel("Il separatore divide i due gruppi. Le modifiche valgono per tutti i mesi."))
+        lay.addWidget(lst)
+
+        def new():
+            text, ok = QInputDialog.getText(dlg, "Nuovo medico", "Cognome:")
+            if ok and text.strip():
+                lst.setCurrentItem(add(text.strip(), None))
+
+        def rename():
+            it = lst.currentItem()
+            if not it or not it.data(Qt.UserRole):
+                return
+            text, ok = QInputDialog.getText(dlg, "Rinomina", "Cognome:", text=it.data(Qt.UserRole))
+            if ok and text.strip():
+                it.setData(Qt.UserRole, text.strip())
+                it.setText(text.strip())
+
+        def remove():
+            r = lst.currentRow()
+            it = lst.currentItem()
+            if it and it.data(Qt.UserRole):
+                lst.takeItem(r)
+
+        def move(delta):
+            r = lst.currentRow()
+            if r < 0 or not 0 <= r + delta < lst.count():
+                return
+            it = lst.takeItem(r)
+            lst.insertItem(r + delta, it)
+            lst.setCurrentRow(r + delta)
+
+        row = QHBoxLayout()
+        for label, fn in (("Aggiungi", new), ("Rinomina", rename), ("Rimuovi", remove),
+                          ("\u25b2 Su", lambda: move(-1)), ("\u25bc Gi\u00f9", lambda: move(1))):
+            b = QPushButton(label)
+            b.clicked.connect(fn)
+            row.addWidget(b)
+        lay.addLayout(row)
+        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        bb.accepted.connect(dlg.accept)
+        bb.rejected.connect(dlg.reject)
+        lay.addWidget(bb)
+        dlg.resize(380, 600)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        self.apply_doctors([lst.item(k) for k in range(lst.count())])
+
+    def apply_doctors(self, items):
+        new_list = [it.data(Qt.UserRole) for it in items]
+        names = [n for n in new_list if n]
+        if len(names) != len(set(names)):
+            QMessageBox.warning(self, "Gestione medici", "Ci sono nomi duplicati: modifica annullata.")
+            return
+        origs = {it.data(Qt.UserRole + 1) for it in items}
+        renames = {it.data(Qt.UserRole + 1): it.data(Qt.UserRole) for it in items
+                   if it.data(Qt.UserRole) and it.data(Qt.UserRole + 1)
+                   and it.data(Qt.UserRole) != it.data(Qt.UserRole + 1)}
+        removed = [n for n in DOCTORS if n and n not in origs]
+        if removed and QMessageBox.question(
+                self, "Gestione medici",
+                "Rimuovendo " + ", ".join(removed) + " i loro turni non saranno pi\u00f9 visibili "
+                "(restano nei file di backup). Continuare?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
+            return
+        self.table.save()
+        backup(save_file(), force=True)
+        if renames:
+            for fn in os.listdir(base_dir()):
+                if fn.startswith("turni_") and fn.endswith(".json"):
+                    path = os.path.join(base_dir(), fn)
+                    try:
+                        with open(path, encoding="utf-8") as f:
+                            raw = json.load(f)
+                    except (OSError, ValueError):
+                        continue
+                    ch = False
+                    for old, newn in renames.items():
+                        if old in raw and newn not in raw:
+                            raw[newn] = raw.pop(old)
+                            ch = True
+                    if ch:
+                        with open(path, "w", encoding="utf-8") as f:
+                            json.dump(raw, f, ensure_ascii=False, indent=1)
+        DOCTORS[:] = new_list
+        with open(doctors_file(), "w", encoding="utf-8") as f:
+            json.dump(new_list, f, ensure_ascii=False, indent=1)
+        self.build()
 
     def undo(self):
         if not self.table.undo():
@@ -730,7 +1752,14 @@ class Win(QMainWindow):
         tb.addAction("Apri", self.open_file)
         tb.addAction("Esporta PDF", self.export)
         tb.addSeparator()
+        tb.addAction("Controlla copertura", self.check_coverage)
+        tb.addAction("Riepilogo", self.summary)
+        tb.addAction("Medici", self.manage_doctors)
         tb.addAction("Cancella tutto", self.clear_all)
+        tb.addSeparator()
+        tb.addAction("Settimanale", self.weekly)
+        tb.addAction("Istruzioni", self.manual)
+        tb.addAction("Crediti", self.about)
         self.build()
         self.mese.currentIndexChanged.connect(self.pick_month)
         self.anno.valueChanged.connect(self.pick_month)
@@ -751,7 +1780,7 @@ class Win(QMainWindow):
         self.pick_month()
 
     def build(self):
-        self.setWindowTitle(f"Turni - U.O.C. Anestesia e Rianimazione - {MESI[MONTH - 1]} {YEAR}")
+        self.setWindowTitle(f"Moreno - U.O.C. Anestesia e Rianimazione - {MESI[MONTH - 1]} {YEAR}")
         self.table = Planner()
         self.footer = self.make_footer()
         self.table.footer = self.footer
