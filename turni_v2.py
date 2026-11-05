@@ -6,7 +6,7 @@ import json
 import copy
 import shutil
 import time
-from PySide6.QtCore import Qt, QTimer, QPoint, QPointF, QMarginsF, QRectF
+from PySide6.QtCore import Qt, QTimer, QPoint, QPointF, QMarginsF, QRectF, QEvent
 from PySide6.QtGui import QShortcut, QKeySequence, QPen
 from PySide6.QtGui import QPainter, QPdfWriter, QPageSize, QPageLayout
 from PySide6.QtGui import QColor, QBrush, QFont, QCursor, QFontMetricsF
@@ -929,6 +929,8 @@ class WeeklyDialog(QDialog):
         self.tab.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.tab.setSelectionMode(QAbstractItemView.NoSelection)
         self.tab.cellClicked.connect(self.cell_clicked)
+        self.tab.viewport().installEventFilter(self)
+        self._press = None
         self.tab.horizontalHeader().sectionClicked.connect(self.edit_day_specs)
         self.tab.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tab.customContextMenuRequested.connect(self.cell_menu)
@@ -1519,6 +1521,50 @@ class WeeklyDialog(QDialog):
                 else:
                     sub.addAction(f"Sposta in {title}", lambda n=name, s=s: self.move(kind, day, n, s))
         menu.exec(QCursor.pos())
+
+    def eventFilter(self, obj, ev):
+        if obj is self.tab.viewport() and ev.type() in (QEvent.MouseButtonPress, QEvent.MouseButtonRelease) \
+                and ev.button() == Qt.LeftButton:
+            it = self.tab.indexAt(ev.position().toPoint())
+            cell = (it.row(), it.column()) if it.isValid() else None
+            if ev.type() == QEvent.MouseButtonPress:
+                self._press = cell
+            else:
+                p, self._press = self._press, None
+                if p and cell and p != cell:
+                    self.drag_move(p, cell)
+        return super().eventFilter(obj, ev)
+
+    def pick_name(self, names):
+        if len(names) == 1:
+            return names[0]
+        menu = QMenu(self)
+        acts = {menu.addAction(n): n for n in names}
+        a = menu.exec(QCursor.pos())
+        return acts.get(a)
+
+    def drag_move(self, a, b):
+        (r0, c0), (r1, c1) = a, b
+        c0 -= LC
+        c1 -= LC
+        if c0 < 0 or c0 != c1:
+            return
+        k0, l0, cells0 = self.rows[r0]
+        k1, l1, cells1 = self.rows[r1]
+        if k0 != k1 or k0 not in ("SO", "SOP") or not cells0[c0]:
+            return
+        if (self.row_key(r0), c0) in self.ovr or (self.row_key(r1), c1) in self.ovr:
+            return
+        day = self.days[c0]
+        n = self.pick_name(cells0[c0])
+        if n is None:
+            return
+        if cells1[c1]:
+            o = self.pick_name(cells1[c1])
+            if o is not None:
+                self.swap(k0, day, n, l0, o, l1)
+        else:
+            self.move(k0, day, n, l1)
 
     def rows_for(self, kind, spec):
         for k, lab, cells in self.rows:

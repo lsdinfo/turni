@@ -1140,6 +1140,28 @@ $("wk-table").addEventListener("click", (ev) => {
   };
 }, true);
 $("wk-table").addEventListener("click", wkClick);
+let wkDrag = null;
+$("wk-table").addEventListener("mousedown", (ev) => {
+  const td = ev.target.closest && ev.target.closest("td.c");
+  wkDrag = ev.button === 0 && td && td.dataset.t.startsWith("s:") ? td : null;
+  if (wkDrag) ev.preventDefault();
+});
+document.addEventListener("mouseup", (ev) => {
+  const a = wkDrag; wkDrag = null;
+  const b = ev.target.closest && ev.target.closest("#wk-table td.c");
+  if (!a || !b || a === b || !b.dataset.t.startsWith("s:")) return;
+  const pa = a.dataset.t.split(":"), pb = b.dataset.t.split(":"), c = +a.dataset.c;
+  if (pa[1] !== pb[1] || c !== +b.dataset.c) return;
+  if (wk.ovr.has(wkRowKey(a.dataset.t) + "|" + c) || wk.ovr.has(wkRowKey(b.dataset.t) + "|" + c)) return;
+  const kind = pa[1], la = pa[2] || null, lb = pb[2] || null, day = wk.days[c];
+  const src = wkRowCells(kind, la)[c], dst = wkRowCells(kind, lb)[c];
+  if (!src.length) return;
+  const pick = (names, cb) => names.length === 1 ? cb(names[0]) : showMenu(ev.clientX, ev.clientY, names.map((n) => ({ label: n, action: () => cb(n) })));
+  pick(src, (n) => {
+    if (!dst.length) wkMove(kind, day, n, lb);
+    else pick(dst, (o) => wkSwap(kind, day, n, la, o, lb));
+  });
+});
 $("wk-table").addEventListener("contextmenu", (ev) => {
   const td = ev.target.closest && ev.target.closest("td.c");
   if (!td) return;
