@@ -79,7 +79,7 @@
   .legend { display: none; }
   @media print {
     @page { size: A3 landscape; margin: 8mm; }
-    .toolbar, #menu { display: none !important; }
+    .toolbar, #menu, .noprint { display: none !important; }
     .wrap { height: auto; overflow: hidden; max-height: 1055px; }
     html, body { height: auto; overflow: hidden; }
     .ptitle { display: block; font-size: 16px; margin: 0 0 6px; }
@@ -160,7 +160,7 @@
   <div class="bar">
     <button id="wk-prev">&#9664;</button><b id="wk-lbl"></b><button id="wk-next">&#9654;</button>
     <span class="sep"></span>
-    <button id="wk-specs">Specialità della settimana...</button>
+    <span class="noprint" style="font-size:12px">Clic sul giorno in alto: scegli le specialità</span>
     <button id="wk-reset">Azzera assegnazioni</button>
     <button id="wk-print">Stampa / PDF</button>
     <button id="wk-close">Chiudi</button>
@@ -893,12 +893,17 @@ function wkExpected(c, d) {
   return true;
 }
 const wkWeek = () => (wk.store[isoDate(wk.monday)] ||= {});
-const wkSpecs = () => wkWeek().specs || SPECS;
+const wkDaySpecs = (kind, k) => {
+  const w = wkWeek(), v = (w.dayspecs || {})[`${kind}|${isoDate(addDays(wk.monday, k))}`];
+  const base = v || (v === undefined ? WEEK_SCHEMA[k][kind].filter((s) => !w.specs || w.specs.includes(s)) : []);
+  return SPECS.filter((s) => base.includes(s));
+};
+const wkSpecs = () => SPECS.filter((s) => [0, 1, 2, 3, 4, 5, 6].some((k) => wkDaySpecs("SO", k).includes(s) || wkDaySpecs("SOP", k).includes(s)));
 function wkSave() { localStorage.setItem(WEEK_KEY, JSON.stringify(wk.store)); }
 function wkSpecOf(kind, d, name) {
   const v = (wkWeek().assign || {})[`${kind}|${isoDate(d)}|${name}`];
   if (v === undefined) return wk.auto[`${kind}|${isoDate(d)}|${name}`] || null;
-  return wkSpecs().includes(v) ? v : null;
+  return wkDaySpecs(kind, (d.getDay() + 6) % 7).includes(v) ? v : null;
 }
 function wkRowCells(kind, label) {
   const r = wk.rows.find((x) => x.kind === kind && x.label === label);
@@ -933,7 +938,7 @@ function wkCompute() {
       const names = wk.pool[kind][k];
       const key = (n) => `${kind}|${isoDate(d)}|${n}`;
       const occupied = new Set(names.filter((n) => key(n) in assign).map((n) => assign[key(n)]));
-      const free = WEEK_SCHEMA[k][kind].filter((s) => specs.includes(s) && !occupied.has(s));
+      const free = wkDaySpecs(kind, k).filter((s) => !occupied.has(s));
       names.filter((n) => !(key(n) in assign)).forEach((n, j) => { if (j < free.length) wk.auto[key(n)] = free[j]; });
     });
   }
@@ -981,7 +986,7 @@ function wkRender() {
   };
   let h = `<colgroup><col style="width:4.5%"><col style="width:12.5%"><col style="width:7%">${'<col style="width:10.8%">'.repeat(7)}</colgroup>`;
   h += `<tr class="hd"><th colspan="3" class="cy rd big">${MESI[mon.getMonth()].toUpperCase()} ${mon.getFullYear()}</th>` +
-    days.map((d, k) => `<th class="${off[k] ? "ye rd" : "cy"}"><span style="font-weight:${off[k] ? 700 : 400};font-size:15px">${GIORNI[k]}</span><br><span style="font-size:15px">${d.getDate()}</span></th>`).join("") + "</tr>";
+    days.map((d, k) => `<th class="${off[k] ? "ye rd" : "cy"} dh" data-d="${k}"><span style="font-weight:${off[k] ? 700 : 400};font-size:15px">${GIORNI[k]}</span><br><span style="font-size:15px">${d.getDate()}</span><span class="noprint"> &#9662;</span></th>`).join("") + "</tr>";
   const rg = g("RIA_P");
   const rm = g("RIA_M").map((l, k) => { const r = [...l]; for (const n of rg[k]) { const j = r.indexOf(n); if (j >= 0) r.splice(j, 1); } return r; });
   const top = [
@@ -1075,7 +1080,7 @@ function wkClick(ev) {
   }
   const kind = parts[0] === "s" ? parts[1] : null, label = parts[2] || null;
   if (!kind) return;
-  const cells = wkRowCells(kind, label)[c], specs = wkSpecs(), items = [];
+  const cells = wkRowCells(kind, label)[c], specs = wkDaySpecs(kind, c), items = [];
   if (!cells.length && label) {
     for (const n of wkRowCells(kind, null)[c]) items.push({ label: `Assegna ${n}`, action: () => wkMove(kind, day, n, label) });
   } else {
@@ -1105,6 +1110,29 @@ $("wk-close").onclick = () => { $("wk").style.display = "none"; hideMenu(); };
 $("wk-prev").onclick = () => { wk.monday = addDays(wk.monday, -7); wkRender(); };
 $("wk-next").onclick = () => { wk.monday = addDays(wk.monday, 7); wkRender(); };
 $("wk-print").onclick = () => window.print();
+$("wk-table").addEventListener("click", (ev) => {
+  const th = ev.target.closest && ev.target.closest("th.dh");
+  if (!th) return;
+  ev.stopPropagation();
+  const k = +th.dataset.d, day = wk.days[k], iso = isoDate(day);
+  const box = (kind, title) => `<div><b>${title}</b>` + SPECS.map((s) =>
+    `<div class="row"><label><input type="checkbox" data-k="${kind}" value="${s}"${wkDaySpecs(kind, k).includes(s) ? " checked" : ""}> ${esc(SPEC_NAMES[s])}</label></div>`).join("") + "</div>";
+  const dlg = showDialog(`<b>Specialità di ${GIORNI[k]} ${day.getDate()}/${day.getMonth() + 1}</b>
+    <div style="display:flex;gap:24px;margin-top:6px">${box("SO", "Mattina (SO)")}${box("SOP", "Pomeriggio (SOP)")}</div>
+    <div class="row"><button id="ds-def">Ripristina default</button></div>`);
+  dlg.onchange = () => {
+    const ds = (wkWeek().dayspecs ||= {});
+    for (const kind of ["SO", "SOP"]) ds[`${kind}|${iso}`] = SPECS.filter((s) => dlg.querySelector(`input[data-k="${kind}"][value="${s}"]`).checked);
+    wkSave(); wkRender();
+  };
+  const base = dlg.onclick;
+  dlg.onclick = (e2) => {
+    base(e2);
+    if (e2.target.id !== "ds-def") return;
+    for (const kind of ["SO", "SOP"]) delete (wkWeek().dayspecs || {})[`${kind}|${iso}`];
+    dlg.close(); wkSave(); wkRender();
+  };
+}, true);
 $("wk-table").addEventListener("click", wkClick);
 $("wk-table").addEventListener("contextmenu", (ev) => {
   const td = ev.target.closest && ev.target.closest("td.c");
@@ -1126,16 +1154,6 @@ $("wk-table").addEventListener("contextmenu", (ev) => {
     dlg.close(); wkSave(); wkRender();
   };
 });
-$("wk-specs").onclick = (ev) => {
-  ev.stopPropagation();
-  const cur = wkSpecs();
-  const dlg = showDialog(`<b>Specialità della settimana</b>` + SPECS.map((s) =>
-    `<div class="row"><label><input type="checkbox" value="${s}"${cur.includes(s) ? " checked" : ""}> ${esc(SPEC_NAMES[s])}</label></div>`).join(""));
-  dlg.onchange = () => {
-    wkWeek().specs = SPECS.filter((s) => dlg.querySelector(`input[value="${s}"]`).checked);
-    wkSave(); wkRender();
-  };
-};
 $("wk-reset").onclick = (ev) => {
   ev.stopPropagation();
   const r = ev.currentTarget.getBoundingClientRect();
@@ -1201,7 +1219,7 @@ $("help").onclick = () => showDialog(`<div style="max-height:75vh;overflow:auto;
 <li><b>Medici</b>: aggiungi, rinomina, rimuovi o sposta i medici (vale per tutti i mesi).</li></ul>
 <h3>Turno settimanale</h3><ul>
 <li>Il pulsante <b>Settimanale</b> apre la settimana (luned\u00ec-domenica) con guardie, ambulatori e sale operatorie, mattina e pomeriggio.</li>
-<li>Le sale (SO al mattino, SOP al pomeriggio) si compilano da sole in base ai turni del mese; i medici si possono cambiare dal menu a scomparsa.</li>
+<li>Le sale (SO al mattino, SOP al pomeriggio) si compilano da sole in base ai turni del mese; i medici si possono cambiare dal menu a scomparsa. Cliccando sul giorno in alto scegli, per mattina e pomeriggio, quali specialit\u00e0 sono attive (anche entrambe); il valore predefinito \u00e8 lo schema abituale.</li>
 <li>Un "?" rosso indica una guardia obbligatoria mancante: con un clic puoi confermare che resta scoperta ("/").</li>
 <li>Nel fine settimana il medico AG 12 ore compare sia al mattino sia al pomeriggio.</li>
 <li><b>Tasto destro</b> su una casella: forzare qualsiasi valore (un nome per riga, "-" per svuotare) o ripristinare quello automatico. Le caselle forzate sono sottolineate.</li>

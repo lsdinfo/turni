@@ -61,7 +61,7 @@ MANUAL_HTML = """
 <h3>Turno settimanale</h3>
 <ul>
 <li>Il pulsante <b>Settimanale</b> apre la settimana (luned\u00ec-domenica) con guardie, ambulatori e sale operatorie, mattina e pomeriggio.</li>
-<li>Le sale (SO al mattino, SOP al pomeriggio) si compilano da sole in base ai turni del mese; i medici si possono cambiare dal menu a scomparsa.</li>
+<li>Le sale (SO al mattino, SOP al pomeriggio) si compilano da sole in base ai turni del mese; i medici si possono cambiare dal menu a scomparsa. Cliccando sul giorno in alto scegli, per mattina e pomeriggio, quali specialit\u00e0 sono attive (anche entrambe); il valore predefinito \u00e8 lo schema abituale.</li>
 <li>Un "?" rosso indica una guardia obbligatoria mancante: con un clic puoi confermare che resta scoperta ("/").</li>
 <li>Nel fine settimana il medico AG 12 ore compare sia al mattino sia al pomeriggio.</li>
 <li><b>Tasto destro</b> su una casella: "Modifica a mano..." per forzare qualsiasi valore (un nome per riga, "-" per svuotare) oppure "Ripristina valore automatico". Le caselle forzate sono sottolineate.</li>
@@ -912,25 +912,24 @@ class WeeklyDialog(QDialog):
         b_next = QPushButton("\u25b6")
         self.lbl = QLabel()
         self.lbl.setStyleSheet("font-weight:bold;font-size:14px")
-        b_spec = QPushButton("Specialità della settimana...")
         b_prev.clicked.connect(lambda: self.shift(-7))
         b_next.clicked.connect(lambda: self.shift(7))
-        b_spec.clicked.connect(self.edit_specs)
         for w in (b_prev, self.lbl, b_next):
             top.addWidget(w)
         top.addStretch()
+        top.addWidget(QLabel("Clic sul giorno in alto: scegli le specialità"))
         b_reset = QPushButton("Azzera assegnazioni")
         b_reset.clicked.connect(self.reset_assign)
         top.addWidget(b_reset)
         b_pdf = QPushButton("Esporta PDF")
         b_pdf.clicked.connect(self.save_pdf)
         top.addWidget(b_pdf)
-        top.addWidget(b_spec)
         lay.addLayout(top)
         self.tab = QTableWidget()
         self.tab.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.tab.setSelectionMode(QAbstractItemView.NoSelection)
         self.tab.cellClicked.connect(self.cell_clicked)
+        self.tab.horizontalHeader().sectionClicked.connect(self.edit_day_specs)
         self.tab.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tab.customContextMenuRequested.connect(self.cell_menu)
         lay.addWidget(self.tab)
@@ -1210,24 +1209,34 @@ class WeeklyDialog(QDialog):
         return self.store.setdefault(self.monday.isoformat(), {})
 
     def specs(self):
-        return self.week().get("specs", list(SPECIALITA))
+        days = [self.monday + datetime.timedelta(days=k) for k in range(7)]
+        act = {s for d in days for kind in ("SO", "SOP") for s in self.day_specs(kind, d)}
+        return [s for s in SPECIALITA if s in act]
+
+    def day_specs(self, kind, day):
+        w = self.week()
+        v = w.get("dayspecs", {}).get(f"{kind}|{day.isoformat()}")
+        if v is None:
+            v = WEEK_SCHEMA.get(day.weekday(), {}).get(kind, [])
+            if "specs" in w:
+                v = [s for s in v if s in w["specs"]]
+        return [s for s in SPECIALITA if s in v]
 
     def spec_of(self, kind, day, name):
         s = self.week().get("assign", {}).get(f"{kind}|{day.isoformat()}|{name}")
         if s is None:
             return self.auto.get((kind, day.isoformat(), name))
-        return s if s in self.specs() else None
+        return s if s in self.day_specs(kind, day) else None
 
     def build_auto(self, days):
         self.auto = {}
         assign = self.week().get("assign", {})
-        specs = self.specs()
         for kind in ("SO", "SOP"):
             for k, d in enumerate(days):
                 names = self.pool[kind][k]
                 keys = {n: f"{kind}|{d.isoformat()}|{n}" for n in names}
                 occupied = {assign[keys[n]] for n in names if keys[n] in assign}
-                free = [s for s in WEEK_SCHEMA.get(d.weekday(), {}).get(kind, []) if s in specs and s not in occupied]
+                free = [s for s in self.day_specs(kind, d) if s not in occupied]
                 autos = [n for n in names if keys[n] not in assign]
                 for n, s in zip(autos, free):
                     self.auto[(kind, d.isoformat(), n)] = s
@@ -1245,26 +1254,47 @@ class WeeklyDialog(QDialog):
         self.monday += datetime.timedelta(days=n)
         self.fill()
 
-    def edit_specs(self):
+    def edit_day_specs(self, col):
+        k = col - LC
+        if not 0 <= k < 7:
+            return
+        day = self.days[k]
         dlg = QDialog(self)
-        dlg.setWindowTitle("Specialità della settimana")
+        dlg.setWindowTitle(f"Specialità di {GIORNI_LUNGHI[k]} {day:%d/%m}")
         lay = QVBoxLayout(dlg)
-        lst = QListWidget()
-        cur = self.specs()
-        for s in SPECIALITA:
-            it = QListWidgetItem(s)
-            it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
-            it.setCheckState(Qt.Checked if s in cur else Qt.Unchecked)
-            lst.addItem(it)
-        lay.addWidget(lst)
-        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        cols = QHBoxLayout()
+        lists = {}
+        for kind, title in (("SO", "Mattina (SO)"), ("SOP", "Pomeriggio (SOP)")):
+            box = QVBoxLayout()
+            box.addWidget(QLabel(f"<b>{title}</b>"))
+            lst = QListWidget()
+            cur = self.day_specs(kind, day)
+            for s in SPECIALITA:
+                it = QListWidgetItem(s)
+                it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
+                it.setCheckState(Qt.Checked if s in cur else Qt.Unchecked)
+                lst.addItem(it)
+            box.addWidget(lst)
+            cols.addLayout(box)
+            lists[kind] = lst
+        lay.addLayout(cols)
+        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel | QDialogButtonBox.RestoreDefaults)
         bb.accepted.connect(dlg.accept)
         bb.rejected.connect(dlg.reject)
+        reset = []
+        bb.button(QDialogButtonBox.RestoreDefaults).clicked.connect(lambda: (reset.append(1), dlg.accept()))
         lay.addWidget(bb)
-        if dlg.exec() == QDialog.Accepted:
-            self.week()["specs"] = [s for k, s in enumerate(SPECIALITA) if lst.item(k).checkState() == Qt.Checked]
-            self.persist()
-            self.fill()
+        if dlg.exec() != QDialog.Accepted:
+            return
+        ds = self.week().setdefault("dayspecs", {})
+        for kind, lst in lists.items():
+            key = f"{kind}|{day.isoformat()}"
+            if reset:
+                ds.pop(key, None)
+            else:
+                ds[key] = [s for i, s in enumerate(SPECIALITA) if lst.item(i).checkState() == Qt.Checked]
+        self.persist()
+        self.fill()
 
     def fill(self):
         mon = self.monday
@@ -1317,7 +1347,7 @@ class WeeklyDialog(QDialog):
         t.clear()
         t.setRowCount(len(rows))
         t.setColumnCount(LC + 7)
-        t.setHorizontalHeaderLabels(["", "", ""] + [f"{GIORNI_LUNGHI[k]} {d:%d/%m}" for k, d in enumerate(days)])
+        t.setHorizontalHeaderLabels(["", "", ""] + [f"{GIORNI_LUNGHI[k]} {d:%d/%m} \u25be" for k, d in enumerate(days)])
         for k, d in enumerate(days):
             if is_weekend_date(d):
                 hi = t.horizontalHeaderItem(LC + k)
@@ -1462,8 +1492,8 @@ class WeeklyDialog(QDialog):
             return
         if kind not in ("SO", "SOP"):
             return
-        specs = self.specs()
         menu = QMenu(self)
+        specs = self.day_specs(kind, day)
         if not cells[c] and label is not None:
             for n in self.rows_for(kind, None)[c]:
                 menu.addAction(f"Assegna {n}", lambda n=n: self.move(kind, day, n, label))
