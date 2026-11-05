@@ -1211,6 +1211,7 @@ class WeeklyDialog(QDialog):
     def specs(self):
         days = [self.monday + datetime.timedelta(days=k) for k in range(7)]
         act = {s for d in days for kind in ("SO", "SOP") for s in self.day_specs(kind, d)}
+        act |= set(self.week().get("assign", {}).values())
         return [s for s in SPECIALITA if s in act]
 
     def day_specs(self, kind, day):
@@ -1226,7 +1227,7 @@ class WeeklyDialog(QDialog):
         s = self.week().get("assign", {}).get(f"{kind}|{day.isoformat()}|{name}")
         if s is None:
             return self.auto.get((kind, day.isoformat(), name))
-        return s if s in self.day_specs(kind, day) else None
+        return s if s in SPECIALITA else None
 
     def build_auto(self, days):
         self.auto = {}
@@ -1493,10 +1494,13 @@ class WeeklyDialog(QDialog):
         if kind not in ("SO", "SOP"):
             return
         menu = QMenu(self)
-        specs = self.day_specs(kind, day)
+        specs = self.specs()
         if not cells[c] and label is not None:
-            for n in self.rows_for(kind, None)[c]:
-                menu.addAction(f"Assegna {n}", lambda n=n: self.move(kind, day, n, label))
+            for n in self.pool[kind][c]:
+                cur = self.spec_of(kind, day, n)
+                if cur != label:
+                    menu.addAction(f"Assegna {n}" if cur is None else f"Sposta qui {n} (da {cur})",
+                                   lambda n=n: self.move(kind, day, n, label))
             if menu.isEmpty():
                 return
             menu.exec(QCursor.pos())

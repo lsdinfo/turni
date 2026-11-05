@@ -898,12 +898,15 @@ const wkDaySpecs = (kind, k) => {
   const base = v || (v === undefined ? WEEK_SCHEMA[k][kind].filter((s) => !w.specs || w.specs.includes(s)) : []);
   return SPECS.filter((s) => base.includes(s));
 };
-const wkSpecs = () => SPECS.filter((s) => [0, 1, 2, 3, 4, 5, 6].some((k) => wkDaySpecs("SO", k).includes(s) || wkDaySpecs("SOP", k).includes(s)));
+const wkSpecs = () => {
+  const used = new Set(Object.values(wkWeek().assign || {}));
+  return SPECS.filter((s) => used.has(s) || [0, 1, 2, 3, 4, 5, 6].some((k) => wkDaySpecs("SO", k).includes(s) || wkDaySpecs("SOP", k).includes(s)));
+};
 function wkSave() { localStorage.setItem(WEEK_KEY, JSON.stringify(wk.store)); }
 function wkSpecOf(kind, d, name) {
   const v = (wkWeek().assign || {})[`${kind}|${isoDate(d)}|${name}`];
   if (v === undefined) return wk.auto[`${kind}|${isoDate(d)}|${name}`] || null;
-  return wkDaySpecs(kind, (d.getDay() + 6) % 7).includes(v) ? v : null;
+  return v !== "-" && SPECS.includes(v) ? v : null;
 }
 function wkRowCells(kind, label) {
   const r = wk.rows.find((x) => x.kind === kind && x.label === label);
@@ -1080,9 +1083,12 @@ function wkClick(ev) {
   }
   const kind = parts[0] === "s" ? parts[1] : null, label = parts[2] || null;
   if (!kind) return;
-  const cells = wkRowCells(kind, label)[c], specs = wkDaySpecs(kind, c), items = [];
+  const cells = wkRowCells(kind, label)[c], specs = wkSpecs(), items = [];
   if (!cells.length && label) {
-    for (const n of wkRowCells(kind, null)[c]) items.push({ label: `Assegna ${n}`, action: () => wkMove(kind, day, n, label) });
+    for (const n of wk.pool[kind][c]) {
+      const cur = wkSpecOf(kind, day, n);
+      if (cur !== label) items.push({ label: cur ? `Sposta qui ${n} (da ${cur})` : `Assegna ${n}`, action: () => wkMove(kind, day, n, label) });
+    }
   } else {
     for (const name of cells) {
       items.push({ label: name, disabled: true });
