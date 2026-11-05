@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Moreno - U.O.C. Anestesia e Rianimazione</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 12px "Segoe UI", system-ui, sans-serif; color: #000; background: #fff; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 8px;
+             background: #f0f0f0; border-bottom: 1px solid #bbb; position: sticky; top: 0; z-index: 50; }
+  .toolbar button, .toolbar select, .toolbar input { font: inherit; padding: 3px 8px; }
+  .toolbar .sep { width: 1px; height: 20px; background: #bbb; margin: 0 4px; }
+  .toolbar input[type=number] { width: 68px; }
+  #status { margin-left: auto; color: #555; }
+  .wrap { overflow: auto; height: calc(100vh - 42px); }
+  table { border-collapse: separate; border-spacing: 0; user-select: none; }
+  th, td { border-right: 1px solid #888; border-bottom: 1px solid #888; text-align: center;
+           padding: 0; height: 20px; min-width: 44px; max-width: 44px; overflow: hidden;
+           white-space: nowrap; font-size: 12px; }
+  table { border-left: 1px solid #888; border-top: 1px solid #888; }
+  th { position: sticky; top: 0; background: #fff; z-index: 3; height: 34px; white-space: pre-line; line-height: 1.15; }
+  th.red { color: #e00000; }
+  th.corner, td.name { position: sticky; left: 0; min-width: 130px; max-width: 130px; z-index: 4; background: #fff; font-weight: 700; }
+  th.corner { z-index: 6; }
+  td.name { z-index: 2; }
+  td.tot, th.tot { min-width: 78px; max-width: 78px; font-size: 11px; white-space: pre-line; line-height: 1.15; }
+  td.tot.ok { color: #0a7d00; }
+  td.we { background: #ffffa6; }
+  tr.sep td { background: #dddddd; height: 22px; font-size: 10px; cursor: pointer; }
+  tr.sep td.name { background: #dddddd; }
+  td.c { cursor: pointer; }
+  td.c:hover { outline: 2px solid #3b82f6; outline-offset: -2px; }
+  tfoot td { position: sticky; background: #eee; z-index: 3; height: 22px; font-weight: 600; }
+  tfoot tr:nth-child(1) td { bottom: 66px; }
+  tfoot tr:nth-child(2) td { bottom: 44px; }
+  tfoot tr:nth-child(3) td { bottom: 22px; }
+  tfoot tr:nth-child(4) td { bottom: 0; }
+  tfoot td.name { z-index: 5; background: #eee; font-size: 11px; }
+  tfoot td.bad { background: #ff9a9a !important; }
+  tfoot input { width: 100%; height: 100%; border: 0; text-align: center; font: inherit; background: transparent; padding: 0; }
+  #menu { position: fixed; z-index: 100; background: #fff; border: 1px solid #888; box-shadow: 2px 3px 8px rgba(0,0,0,.3);
+          padding: 3px 0; min-width: 170px; display: none; font-size: 13px; max-height: 90vh; overflow: auto; }
+  #menu div { padding: 4px 16px; cursor: pointer; white-space: nowrap; }
+  #menu div:hover:not(.dis) { background: #3b82f6; color: #fff; }
+  #menu div.dis { color: #999; cursor: default; }
+  #menu hr { border: 0; border-top: 1px solid #ccc; margin: 3px 0; }
+  dialog { border: 1px solid #888; padding: 14px; max-width: 520px; }
+  dialog .row { display: flex; gap: 8px; align-items: center; padding: 3px 0; }
+  dialog .row span { flex: 1; }
+  dialog table { border-collapse: collapse; }
+  dialog table th, dialog table td { position: static; border: 1px solid #aaa; padding: 2px 8px; max-width: none; height: auto; }
+  dialog table td.l { text-align: left; }
+  dialog select { width: 100%; font: inherit; }
+  dialog.wide { max-width: 95vw; }
+  th.hd { cursor: pointer; }
+  #wk { display: none; position: fixed; inset: 0; z-index: 60; background: #fff; overflow: auto; }
+  #wk .bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 8px; background: #f0f0f0;
+             border-bottom: 1px solid #bbb; position: sticky; top: 0; z-index: 5; }
+  #wk .bar button { font: inherit; padding: 3px 8px; }
+  #wk .bar b { font-size: 14px; }
+  #wk .sheet { padding: 8px; }
+  table.ws { border-collapse: collapse; width: 100%; table-layout: fixed; font: 700 13px "Times New Roman", Times, serif; color: #000; }
+  table.ws td, table.ws th { border: 1px solid #000; text-align: center; padding: 1px 3px; height: 26px; overflow: hidden;
+                             white-space: normal; word-break: keep-all; max-width: none; min-width: 0; position: static; }
+  table.ws td.c { cursor: pointer; }
+  table.ws td.c:hover { outline: 2px solid #3b82f6; outline-offset: -2px; }
+  table.ws .t { font-weight: 400; font-size: 14px; }
+  table.ws .bt td, table.ws .bt th { border-top: 3px solid #000; }
+  table.ws .dt td.c, table.ws .dt td.t { border-top: 1px dotted #000; }
+  table.ws .cy { background: #ccffff; } table.ws .ye { background: #ffff99; } table.ws .gr { background: #c0c0c0; }
+  table.ws .or { background: #ffcc00; } table.ws .gn { background: #66ff33; } table.ws .rd { color: #ff0000; }
+  table.ws .nb { font-weight: 400; } table.ws .big { font-size: 20px; } table.ws .lab { font-size: 14px; }
+  table.ws .gap td { border: 0; height: 8px; }
+  table.ws .miss { background: #ffd0d0; color: #c00000; }
+  .made { text-align: right; font: italic 11px "Segoe UI", sans-serif; color: #555; margin: 4px 8px; }
+  .wkdata { margin-top: 8px; font: 13px "Times New Roman", serif; }
+  .ptitle { display: none; }
+  .legend { display: none; }
+  @media print {
+    @page { size: A3 landscape; margin: 8mm; }
+    .toolbar, #menu { display: none !important; }
+    .wrap { height: auto; overflow: hidden; max-height: 1055px; }
+    html, body { height: auto; overflow: hidden; }
+    .ptitle { display: block; font-size: 16px; margin: 0 0 6px; }
+    table#grid { zoom: 1; width: 100%; table-layout: fixed; border-color: #000; }
+    #grid th, #grid td { min-width: 0 !important; max-width: none !important; border-color: #000 !important; line-height: 1; }
+    #grid th.corner { width: 9%; font-size: 15px; }
+    #grid td.name { font-size: 14px; padding: 0 2px; }
+    #grid th { height: 30px; font-size: 13px; }
+    #grid td.c { height: 16px; font-size: 13px; overflow: hidden; white-space: nowrap; }
+    #grid tr.sep td { height: 16px; font-size: 11px; }
+    th.tot, td.tot, tfoot, .warn { display: none !important; }
+    td.c, th { font-weight: 700; }
+    td.c[data-h="m"]:not([rowspan]) { border-bottom: 0; }
+    #grid td.c { vertical-align: top; padding-top: 1px; padding-bottom: 0; }
+    #grid td.c[data-h="p"]:not([rowspan]) { vertical-align: bottom; padding-bottom: 1px; padding-top: 0; }
+    .legend { display: table; width: 100%; margin-top: 14px; border-collapse: collapse; border: 2px solid #000; font-size: 13px; page-break-inside: avoid; }
+    .legend td { border: 1px solid #000; padding: 1px 6px; text-align: left; height: 18px; max-width: none; min-width: 0; white-space: nowrap; font-weight: 700; }
+    .legend td.k { text-align: center; width: 5%; }
+    .legend td.n { font-weight: 400; }
+    .legend td.all { text-align: center; }
+    .legend .r { color: #e00000; } .legend .g { color: #00a000; } .legend .b { color: #0000ff; } .legend .p { color: #9000c0; }
+    th, td.name, tfoot td { position: static !important; }
+    tr.sep td { cursor: default; }
+    td.c:hover { outline: none; }
+    tfoot input { font-weight: 600; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+  @media print {
+    body.wkprint .toolbar, body.wkprint .wrap { display: none !important; }
+    body.wkprint #wk { position: static; overflow: visible; display: block !important; }
+    body.wkprint #wk .bar { display: none; }
+    body.wkprint #wk .sheet { padding: 0; }
+    body.wkprint table.ws td.c { cursor: default; text-decoration: none !important; }
+    body.wkprint table.ws td.c:hover { outline: none; }
+  }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <button id="prev" title="Mese precedente">&#9664;</button>
+  <select id="mese"></select>
+  <input id="anno" type="number" min="2020" max="2100">
+  <button id="next" title="Mese successivo">&#9654;</button>
+  <span class="sep"></span>
+  <button id="undo" title="Annulla (Ctrl+Z)">Annulla (Ctrl+Z)</button>
+  <span class="sep"></span>
+  <button id="export">Esporta file</button>
+  <button id="import">Importa file</button>
+  <button id="backups">Backup</button>
+  <button id="print">Stampa / PDF</button>
+  <span class="sep"></span>
+  <button id="cov">Controlla copertura</button>
+  <button id="summ">Riepilogo</button>
+  <button id="docs">Medici</button>
+  <span class="sep"></span>
+  <button id="clear">Cancella tutto</button>
+  <button id="weekly">Settimanale</button>
+  <span class="sep"></span>
+  <button id="help">Istruzioni</button>
+  <button id="about">Crediti</button>
+  <span id="status"></span>
+  <input id="file" type="file" accept=".json,application/json" hidden>
+</div>
+<div class="wrap">
+  <h2 class="ptitle" id="ptitle"></h2>
+  <table id="grid"></table>
+  <table class="legend">
+    <tr><td class="k r">RG</td><td class="r">GUARDIA RIANIMAZIONE GIORNO (8-20)</td><td class="k r">AG mat</td><td class="r">GUARDIA ANESTESIA MATTINA (8-15)</td><td class="k p">P</td><td class="p">AMBULATORIO ANESTESIA (14-20)</td></tr>
+    <tr><td class="k r">RM</td><td class="r">GUARDIA RIANIMAZIONE MATTINA (8-15)</td><td class="k r">AGP</td><td class="r">GUARDIA ANESTESIA POMERIGGIO (14-20)</td><td class="k b">TA</td><td class="b">TERAPIA ANTALGICA (8-15)</td></tr>
+    <tr><td class="k r">RN</td><td class="r">GUARDIA RIANIMAZIONE NOTTE (20-8)</td><td class="k r">AN</td><td class="r">GUARDIA ANESTESIA NOTTE (20-8)</td><td class="k">#</td><td>&ldquo;GETTONE&rdquo;</td></tr>
+    <tr><td class="k r">U</td><td class="r">URGENTISTA (8-15)</td><td class="k g">SO</td><td class="g">SALA OPERATORIA (8-15)</td><td class="k">F</td><td class="n">FERIE &nbsp;&nbsp;&nbsp; (-) = continuo di ferie</td></tr>
+    <tr><td class="k r">AG</td><td class="r">GUARDIA ANESTESIA (8-20)</td><td class="k g">SOP</td><td class="g">SALA OPERATORIA POMERIGGIO (14-20)</td><td class="k"></td><td></td></tr>
+    <tr><td class="all" colspan="6">LE CASELLE DIVISE IN 2 SIGNIFICA: in alto MATTINA &ndash; in basso POMERIGGIO &nbsp;&nbsp;-------&nbsp;&nbsp; SE C&rsquo;E&rsquo; SOLO LA CASELLA SOTTO: E&rsquo; solo il turno di POMERIGGIO &nbsp;&nbsp;-------&nbsp;&nbsp; LE CASELLE BIANCHE SIGNIFICANO RIPOSO/RECUPERO</td></tr>
+  </table>
+  <div class="made">Made with Moreno &copy;</div></div>
+<div id="menu"></div>
+<div id="wk">
+  <div class="bar">
+    <button id="wk-prev">&#9664;</button><b id="wk-lbl"></b><button id="wk-next">&#9654;</button>
+    <span class="sep"></span>
+    <button id="wk-specs">Specialità della settimana...</button>
+    <button id="wk-reset">Azzera assegnazioni</button>
+    <button id="wk-print">Stampa / PDF</button>
+    <button id="wk-close">Chiudi</button>
+    <span style="color:#555">Clic su un nome nelle righe SO / SOP per assegnarlo o scambiarlo; clic su ? per confermare una persona in meno.</span>
+  </div>
+  <div class="sheet"><table class="ws" id="wk-table"></table><div class="wkdata">Data ____________________</div><div class="made">Made with Moreno &copy;</div></div>
+</div>
+<dialog id="dlg"></dialog>
+
+<script>
+"use strict";
+// ---------- Configurazione (modifica qui l'elenco dei medici; "" = riga grigia) ----------
+const DEFAULT_DOCTORS = ["Momesso", "Coppo", "De Bernardo", "Deghaili", "Di Mari", "Licciardello",
+  "Santagati", "Shyti", "Vidal", "Souto Valadares", "",
+  "Andreetta", "De Nobili", "De Paris", "Di Caro", "Ferrante", "Fonda",
+  "Gulino", "Gismondo", "Lacava", "Lucca", "Marzolini", "Michelutto",
+  "Piacente", "Randazzo", "Khudjakof"];
+const DOCTORS_KEY = "turni_medici";
+function loadDoctors() {
+  try {
+    const l = JSON.parse(localStorage.getItem(DOCTORS_KEY));
+    if (Array.isArray(l) && l.every((x) => typeof x === "string") && l.filter((x) => x === "").length === 1) return l;
+  } catch (e) { /* usa l'elenco predefinito */ }
+  return [...DEFAULT_DOCTORS];
+}
+let DOCTORS = loadDoctors();
+const TARGET = 152 * 60;
+const GETTONE_H = 6 * 60;
+const BACKUP_EVERY = 10 * 60 * 1000;
+const BACKUP_KEEP = 30;
+
+const DAY_GUARD = { RG: 12, AG: 12 };
+const NIGHT_GUARD = { RN: 12, AN: 12 };
+const MORNING = { RM: 7, U: 7, SO: 7, TA: 7 };
+const AFTERNOON = { SOP: 6, P: 6, "AGP": 6 };
+const PM_CODES = new Set([...Object.keys(AFTERNOON), "TA"]);
+const FULL = { ...DAY_GUARD, ...NIGHT_GUARD };
+const BLOCK = ["F", "L.104", "Agg", "Mal", "/"];
+const MERGED = ["RG", "AG", "RN", "AN", "F", "L.104", "Mal", "Agg", "/"];
+const CONTINUABLE = ["F", "L.104", "Mal", "Agg"];
+const NO_SUNDAY = ["F", "L.104", "Agg", "Mal"];
+const UNIQUE = ["RM", "RG", "RN", "AN", "U", "AG", "AGP"];
+const REQUIRED_WEEKDAY_ONLY = ["RM", "U", "AGP"];
+const REQUIRED_OFFDAY_ONLY = ["AG"];
+const HOURS = {};
+for (const g of [FULL, MORNING, AFTERNOON]) for (const k in g) HOURS[k] = g[k] * 60;
+for (const k of BLOCK) HOURS[k] = 6 * 60 + 20;
+HOURS["/"] = 0;
+const WD = ["LU", "MA", "ME", "GIO", "VE", "SA", "DO"];
+const MESI = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio",
+  "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
+const COLORS = {};
+for (const k of ["RG", "RM", "RN", "AG", "AGP", "AN", "U"]) COLORS[k] = "#e00000";
+for (const k of ["SO", "SOP"]) COLORS[k] = "#00a000";
+COLORS.P = "#9000c0";
+COLORS.TA = "#0000ff";
+
+// ---------- Stato ----------
+const today = new Date();
+const state = { year: today.getFullYear(), month: today.getMonth() + 1, data: {}, notes: {}, hol: {}, prog: { SO: {}, SOP: {} } };
+const undoStack = [];
+const lastBackup = {};
+let dragStart = null, suppressClick = false, pendingProg = null;
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const ndays = () => new Date(state.year, state.month, 0).getDate();
+const ym = () => `${state.year}_${String(state.month).padStart(2, "0")}`;
+const storeKey = () => `turni_${ym()}`;
+const weekday = (d) => (new Date(state.year, state.month - 1, d).getDay() + 6) % 7;
+
+function fmt(m) {
+  const s = m < 0 ? "-" : "";
+  m = Math.abs(m);
+  return `${s}${Math.floor(m / 60)}.${String(m % 60).padStart(2, "0")}`;
+}
+
+// ---------- Festività ----------
+function easter(y) {
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4;
+  const g = Math.floor((8 * b + 13) / 25), h = (19 * a + b - d - g + 15) % 30;
+  const j = Math.floor(c / 4), k = c % 4, m = Math.floor((a + 11 * h) / 319);
+  const r = (2 * e + 2 * j - k - h + m + 32) % 7;
+  const mese = Math.floor((h - m + r + 90) / 25), giorno = (h - m + r + mese + 19) % 32;
+  return new Date(y, mese - 1, giorno);
+}
+function holidays(y) {
+  const f = { "1-1": "Capodanno", "1-6": "Epifania", "4-25": "Liberazione", "5-1": "Festa del Lavoro",
+    "6-2": "Festa della Repubblica", "8-15": "Ferragosto", "11-1": "Ognissanti", "12-8": "Immacolata",
+    "12-25": "Natale", "12-26": "Santo Stefano" };
+  const p = easter(y), l = new Date(p.getFullYear(), p.getMonth(), p.getDate() + 1);
+  f[`${p.getMonth() + 1}-${p.getDate()}`] = "Pasqua";
+  f[`${l.getMonth() + 1}-${l.getDate()}`] = "Lunedì dell'Angelo";
+  return f;
+}
+const holidayName = (d) => holidays(state.year)[`${state.month}-${d}`] || state.hol[d] || null;
+const isRed = (d) => weekday(d) === 6 || holidayName(d) !== null;
+const isWeekend = (d) => weekday(d) >= 5 || holidayName(d) !== null;
+
+// ---------- Dati ----------
+const entry = (i, d) => (state.data[i] && state.data[i][d]) || {};
+function setEntry(i, d, e) { (state.data[i] ||= {})[d] = e; }
+function delEntry(i, d) { if (state.data[i]) delete state.data[i][d]; }
+const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+const afterNight = (i, d) => d > 1 && has(NIGHT_GUARD, entry(i, d - 1).m);
+const isEmpty = (e) => !e.m && !e.p;
+
+function dayHours(code, d) {
+  if (NO_SUNDAY.includes(code) && isRed(d)) return 0;
+  return HOURS[code] ?? 0;
+}
+
+function calcRow(i) {
+  let total = 0, ngett = 0;
+  for (let d = 1; d <= ndays(); d++) {
+    const e = entry(i, d);
+    const merged = MERGED.includes(e.m);
+    if (has(FULL, e.m) || BLOCK.includes(e.m)) {
+      total += dayHours(e.m, d);
+    } else {
+      let mh = HOURS[e.m] ?? 0, ph;
+      if (PM_CODES.has(e.p)) {
+        ph = 6 * 60;
+        if (has(MORNING, e.m)) mh = 6 * 60;
+      } else {
+        ph = HOURS[e.p] ?? 0;
+      }
+      total += mh + ph;
+    }
+    let n = (e.g || []).length;
+    if (merged) n = Math.min(n, 1);
+    ngett += n;
+    total -= n * (merged ? HOURS[e.m] : GETTONE_H);
+  }
+  return { total, ngett };
+}
+
+function takenBy(code, d, i) {
+  if (!UNIQUE.includes(code)) return null;
+  for (const j in state.data) {
+    const e = entry(+j, d);
+    if (+j !== i && (e.m === code || e.p === code)) return DOCTORS[j];
+  }
+  return null;
+}
+
+function options(i, d, half) {
+  const e = entry(i, d);
+  if (afterNight(i, d)) return isEmpty(e) ? ["/", ...Object.keys(NIGHT_GUARD)] : [];
+  if (half === "m" && has(MORNING, e.m) && !("p" in e)) return [...Object.keys(AFTERNOON), "TA"].filter((c) => !(isWeekend(d) && REQUIRED_WEEKDAY_ONLY.includes(c)));
+  if (has(FULL, e.m) || BLOCK.includes(e.m) || half in e) return [];
+  const opts = half === "m" ? Object.keys(MORNING) : [...Object.keys(AFTERNOON), "TA"];
+  if (isEmpty(e)) {
+    opts.push(...Object.keys(DAY_GUARD), ...Object.keys(NIGHT_GUARD), ...BLOCK);
+    if (d > 1 && CONTINUABLE.includes(entry(i, d - 1).m)) opts.unshift("-");
+  }
+  const bad = isWeekend(d) ? REQUIRED_WEEKDAY_ONLY : REQUIRED_OFFDAY_ONLY;
+  return opts.filter((o) => !bad.includes(o));
+}
+
+function assign(i, d, half, code) {
+  pushUndo();
+  if (code === "-") {
+    const prev = entry(i, d - 1).m;
+    setEntry(i, d, { m: prev, p: prev, cont: true });
+  } else {
+    const cur = entry(i, d);
+    if (has(AFTERNOON, code) || (code === "TA" && half === "m" && "m" in cur)) half = "p";
+    if (has(FULL, code) || BLOCK.includes(code)) setEntry(i, d, { m: code, p: code });
+    else setEntry(i, d, { ...cur, [half]: code });
+  }
+  changed();
+}
+
+function fillContinue(i, d1, d2) {
+  const code = entry(i, d1).m;
+  pushUndo();
+  for (let d = d1 + 1; d <= d2; d++) {
+    if (!isEmpty(entry(i, d)) || afterNight(i, d)) break;
+    setEntry(i, d, { m: code, p: code, cont: true });
+  }
+  changed();
+}
+
+function deleteShift(i, d, half) {
+  const e = entry(i, d);
+  pushUndo();
+  if (MERGED.includes(e.m) || (e.m === e.p && (has(FULL, e.m) || BLOCK.includes(e.m)))) {
+    const first = !e.cont;
+    delEntry(i, d);
+    for (let n = d + 1; first && entry(i, n).cont; n++) delEntry(i, n);
+  } else {
+    delete e[half];
+    e.g = (e.g || []).filter((h) => h !== half);
+    if (isEmpty(e)) delEntry(i, d);
+  }
+  changed();
+}
+
+function toggleGettone(i, d, half) {
+  const e = entry(i, d);
+  pushUndo();
+  const g = new Set(e.g || []);
+  if (g.has(half)) g.delete(half); else g.add(half);
+  e.g = [...g];
+  changed();
+}
+
+// ---------- Undo ----------
+const snap = () => JSON.parse(JSON.stringify({ data: state.data, notes: state.notes, hol: state.hol, prog: state.prog }));
+function pushUndo(s) {
+  undoStack.push(s || snap());
+  if (undoStack.length > 100) undoStack.shift();
+}
+function undo() {
+  const s = undoStack.pop();
+  if (!s) { status("Niente da annullare"); return; }
+  Object.assign(state, s);
+  changed();
+}
+
+// ---------- Salvataggio, backup, file ----------
+function serialize() {
+  const out = {};
+  for (const i in state.data) {
+    for (const d in state.data[i]) {
+      const e = state.data[i][d];
+      if (isEmpty(e)) continue;
+      (out[DOCTORS[i]] ||= {})[d] = { ...e, g: [...(e.g || [])] };
+    }
+  }
+  out.__programmate__ = {};
+  for (const code of ["SO", "SOP"]) {
+    out.__programmate__[code] = {};
+    for (const d in state.prog[code]) if (state.prog[code][d]) out.__programmate__[code][d] = state.prog[code][d];
+  }
+  out.__note__ = { ...state.notes };
+  out.__festivi__ = { ...state.hol };
+  return out;
+}
+
+function deserialize(raw) {
+  const nd = ndays();
+  state.data = {}; state.notes = {}; state.hol = {}; state.prog = { SO: {}, SOP: {} };
+  for (const name in raw) {
+    if (name.startsWith("__")) continue;
+    const i = DOCTORS.indexOf(name);
+    if (i < 0 || !name) continue;
+    for (const d in raw[name]) {
+      const e = raw[name][d];
+      (state.data[i] ||= {})[+d] = { ...e, m: e.m === "AG pom" ? "AGP" : e.m, p: e.p === "AG pom" ? "AGP" : e.p, g: e.g || [] };
+    }
+  }
+  for (const d in raw.__note__ || {}) if (+d <= nd) state.notes[+d] = raw.__note__[d];
+  for (const d in raw.__festivi__ || {}) if (+d <= nd) state.hol[+d] = raw.__festivi__[d];
+  for (const code of ["SO", "SOP"]) {
+    for (const d in (raw.__programmate__ || {})[code] || {}) state.prog[code][+d] = +raw.__programmate__[code][d];
+  }
+}
+
+function backupIfNeeded(force) {
+  const existing = localStorage.getItem(storeKey());
+  if (!existing) return;
+  const now = Date.now();
+  if (!force && now - (lastBackup[storeKey()] || 0) < BACKUP_EVERY) return;
+  lastBackup[storeKey()] = now;
+  localStorage.setItem(`turni_bk|${ym()}|${now}`, existing);
+  const keys = backupKeys();
+  for (const k of keys.slice(0, Math.max(0, keys.length - BACKUP_KEEP))) localStorage.removeItem(k);
+}
+function backupKeys() {
+  const prefix = `turni_bk|${ym()}|`;
+  const keys = [];
+  for (let n = 0; n < localStorage.length; n++) {
+    const k = localStorage.key(n);
+    if (k.startsWith(prefix)) keys.push(k);
+  }
+  return keys.sort();
+}
+
+function save() {
+  backupIfNeeded(false);
+  localStorage.setItem(storeKey(), JSON.stringify(serialize()));
+  status("Salvato alle " + new Date().toLocaleTimeString("it-IT"));
+}
+
+function load() {
+  const s = localStorage.getItem(storeKey());
+  state.data = {}; state.notes = {}; state.hol = {}; state.prog = { SO: {}, SOP: {} };
+  if (s) { try { deserialize(JSON.parse(s)); } catch (e) { status("File dei turni non leggibile"); } }
+}
+
+function status(t) { $("status").textContent = t; }
+
+function download(name, text) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+function changed() {
+  render();
+  save();
+}
+
+// ---------- Menu ----------
+function showMenu(x, y, items) {
+  const m = $("menu");
+  m.innerHTML = "";
+  for (const it of items) {
+    if (it === "sep") { m.appendChild(document.createElement("hr")); continue; }
+    const div = document.createElement("div");
+    div.textContent = it.label;
+    if (it.disabled) div.className = "dis";
+    else div.onclick = (ev) => { ev.stopPropagation(); hideMenu(); it.action(); };
+    m.appendChild(div);
+  }
+  m.style.display = "block";
+  const w = m.offsetWidth, h = m.offsetHeight;
+  m.style.left = Math.max(0, Math.min(x, innerWidth - w - 4)) + "px";
+  m.style.top = Math.max(0, Math.min(y, innerHeight - h - 4)) + "px";
+}
+function hideMenu() { $("menu").style.display = "none"; }
+
+function cellMenu(i, d, half, x, y) {
+  const opts = options(i, d, half);
+  if (!opts.length) return;
+  const e = entry(i, d);
+  const pm = half === "p" || "m" in e;
+  const items = opts.map((o) => {
+    const who = takenBy(o, d, i);
+    const hrs = pm && o === "TA" ? 360 : HOURS[o];
+    const label = (hrs === undefined ? "-  (continua)" : `${o}  (${fmt(hrs)}h)`) + (who ? `  - ${who}` : "");
+    return { label, disabled: !!who, action: () => assign(i, d, half, o) };
+  });
+  items.push("sep", { label: "Altro (sigla libera)...", action: () => {
+    const c = (prompt("Sigla:") || "").trim();
+    if (c) assign(i, d, half, c);
+  } });
+  showMenu(x, y, items);
+}
+
+function contextMenu(i, d, half, x, y) {
+  const e = entry(i, d);
+  if (!(half in e)) return;
+  const items = [];
+  if (MERGED.includes(e.m)) {
+    if (!BLOCK.includes(e.m)) {
+      const g = (e.g || []).length > 0;
+      items.push({ label: `Aggiungi gettone # (-${fmt(HOURS[e.m])}h)`, disabled: g, action: () => toggleGettone(i, d, "m") });
+      items.push({ label: "Rimuovi gettone", disabled: !g, action: () => { pushUndo(); e.g = []; changed(); } });
+    }
+  } else {
+    const g = (e.g || []).includes(half);
+    items.push({ label: g ? "Rimuovi gettone" : `Converti in gettone # (-${fmt(GETTONE_H)}h)`,
+      disabled: BLOCK.includes(e[half]), action: () => toggleGettone(i, d, half) });
+  }
+  items.push({ label: "Elimina turno", action: () => deleteShift(i, d, half) });
+  showMenu(x, y, items);
+}
+
+function noteMenu(d, x, y) {
+  const setNote = (t) => {
+    pushUndo();
+    if (t) state.notes[d] = t; else delete state.notes[d];
+    changed();
+  };
+  showMenu(x, y, [
+    { label: "Bimbi", action: () => setNote("Bimbi") },
+    { label: "Altra nota...", action: () => {
+      const t = prompt("Nota:", state.notes[d] || "");
+      if (t !== null) setNote(t.trim());
+    } },
+    { label: "Elimina nota", disabled: !(d in state.notes), action: () => setNote("") },
+  ]);
+}
+
+// ---------- Copertura, festivi locali, riepilogo, medici ----------
+function missingCoverage() {
+  const res = {};
+  for (let d = 1; d <= ndays(); d++) {
+    const have = new Set();
+    for (const j in state.data) { const e = entry(+j, d); if (e.m) have.add(e.m); if (e.p) have.add(e.p); }
+    const off = isWeekend(d);
+    const miss = UNIQUE.filter((c) => !have.has(c)
+      && !(off && REQUIRED_WEEKDAY_ONLY.includes(c)) && !(!off && REQUIRED_OFFDAY_ONLY.includes(c)));
+    if (!off) {
+      let ta = false, pp = false;
+      for (const j in state.data) { const e = entry(+j, d); if (e.m === "TA") ta = true; if (e.p === "P") pp = true; }
+      if (!ta) miss.push("TA mattina");
+      if (!pp) miss.push("P pomeriggio");
+    }
+    if (miss.length) res[d] = miss;
+  }
+  return res;
+}
+
+function headerMenu(d, x, y) {
+  const setHol = (t) => {
+    pushUndo();
+    if (t) state.hol[d] = t; else delete state.hol[d];
+    changed();
+  };
+  showMenu(x, y, [
+    { label: "Imposta come festivo...", action: () => {
+      const t = prompt("Nome del festivo:", state.hol[d] || "Festivo locale");
+      if (t !== null) setHol(t.trim() || "Festivo locale");
+    } },
+    { label: "Rimuovi festivo locale", disabled: !(d in state.hol), action: () => setHol("") },
+  ]);
+}
+
+function showDialog(html, wide) {
+  const dlg = $("dlg");
+  dlg.className = wide ? "wide" : "";
+  dlg.onchange = null;
+  dlg.innerHTML = html + `<div class="row"><span></span><button id="dlg-close">Chiudi</button></div>`;
+  dlg.onclick = (ev) => { if (ev.target.id === "dlg-close") dlg.close(); };
+  dlg.showModal();
+  return dlg;
+}
+
+function coverageDialog() {
+  const res = missingCoverage();
+  const gg = ["lun", "mar", "mer", "gio", "ven", "sab", "dom"];
+  const days = Object.keys(res);
+  if (!days.length) { showDialog("<b>Controllo copertura</b><p>Tutti i turni obbligatori sono coperti.</p>"); return; }
+  showDialog(`<b>Controllo copertura</b><p>${days.length} giorni con turni mancanti.</p>` +
+    days.map((d) => `<div>${gg[weekday(+d)]} ${d}: manca ${esc(res[d].join(", "))}</div>`).join(""));
+}
+
+function summaryDialog() {
+  const heads = ["Medico", "RG", "AG", "RN", "AN", "Sab/Dom/Fest", "Gettoni", "Assenze", "Ore", "Differenza"];
+  let rows = "";
+  DOCTORS.forEach((name, i) => {
+    if (!name) return;
+    const cnt = { RG: 0, AG: 0, RN: 0, AN: 0 };
+    let fest = 0, ass = 0;
+    for (let d = 1; d <= ndays(); d++) {
+      const e = entry(i, d);
+      if (has(cnt, e.m)) cnt[e.m]++;
+      if (CONTINUABLE.includes(e.m)) ass++;
+      else if (isWeekend(d) && (e.m || e.p) && !BLOCK.includes(e.m)) fest++;
+    }
+    const { total, ngett } = calcRow(i);
+    const vals = [cnt.RG, cnt.AG, cnt.RN, cnt.AN, fest, ngett, ass, fmt(total), fmt(total - TARGET)];
+    rows += `<tr><td class="l">${esc(name)}</td>` + vals.map((v, c) =>
+      `<td${c === 8 && total < TARGET ? ' style="color:#e00000"' : ""}>${v}</td>`).join("") + "</tr>";
+  });
+  showDialog(`<b>Riepilogo - ${MESI[state.month - 1]} ${state.year}</b><div style="max-height:70vh;overflow:auto;margin-top:8px">` +
+    `<table><tr>${heads.map((x) => `<th>${x}</th>`).join("")}</tr>${rows}</table></div>`, true);
+}
+
+function doctorsDialog() {
+  const dlg = $("dlg");
+  const items = DOCTORS.map((n) => ({ name: n, orig: n || null }));
+  let sel = -1;
+  const draw = () => {
+    dlg.className = "";
+    dlg.innerHTML = "<b>Gestione medici</b><p>Il separatore divide i due gruppi. Le modifiche valgono per tutti i mesi.</p>" +
+      `<select id="dl" size="20">${items.map((it, k) => `<option value="${k}"${k === sel ? " selected" : ""}>${esc(it.name || "\u2014 separatore \u2014")}</option>`).join("")}</select>` +
+      `<div class="row"><button data-a="add">Aggiungi</button><button data-a="ren">Rinomina</button><button data-a="del">Rimuovi</button>` +
+      `<button data-a="up">\u25b2 Su</button><button data-a="dn">\u25bc Gi\u00f9</button></div>` +
+      `<div class="row"><button data-a="ok">OK</button><span></span><button data-a="no">Annulla</button></div>`;
+  };
+  dlg.onchange = (ev) => { if (ev.target.id === "dl") sel = +ev.target.value; };
+  dlg.onclick = (ev) => {
+    const a = ev.target.dataset && ev.target.dataset.a;
+    if (!a) return;
+    if (a === "no") { dlg.close(); return; }
+    if (a === "add") {
+      const t = (prompt("Cognome:") || "").trim();
+      if (t) { items.push({ name: t, orig: null }); sel = items.length - 1; }
+    } else if (a === "ren" && sel >= 0 && items[sel].name) {
+      const t = (prompt("Cognome:", items[sel].name) || "").trim();
+      if (t) items[sel].name = t;
+    } else if (a === "del" && sel >= 0 && items[sel].name) {
+      items.splice(sel, 1); sel = -1;
+    } else if ((a === "up" || a === "dn") && sel >= 0) {
+      const n = sel + (a === "up" ? -1 : 1);
+      if (n >= 0 && n < items.length) { [items[sel], items[n]] = [items[n], items[sel]]; sel = n; }
+    } else if (a === "ok") {
+      if (applyDoctors(items)) dlg.close();
+      return;
+    }
+    draw();
+  };
+  draw();
+  dlg.showModal();
+}
+
+function applyDoctors(items) {
+  const names = items.map((it) => it.name).filter(Boolean);
+  if (new Set(names).size !== names.length) { alert("Ci sono nomi duplicati: modifica annullata."); return false; }
+  const origs = new Set(items.map((it) => it.orig).filter(Boolean));
+  const renames = {};
+  for (const it of items) if (it.name && it.orig && it.name !== it.orig) renames[it.orig] = it.name;
+  const removed = DOCTORS.filter((n) => n && !origs.has(n));
+  if (removed.length && !confirm(`Rimuovendo ${removed.join(", ")} i loro turni non saranno pi\u00f9 visibili (restano nei backup). Continuare?`)) return false;
+  save();
+  const keys = [];
+  for (let n = 0; n < localStorage.length; n++) if (/^turni_\d{4}_\d{2}$/.test(localStorage.key(n))) keys.push(localStorage.key(n));
+  for (const k of keys) {
+    const text = localStorage.getItem(k);
+    if (removed.length) localStorage.setItem(`turni_bk|${k.slice(6)}|${Date.now()}`, text);
+    if (!Object.keys(renames).length) continue;
+    try {
+      const raw = JSON.parse(text), out = {};
+      for (const key in raw) out[has(renames, key) ? renames[key] : key] = raw[key];
+      localStorage.setItem(k, JSON.stringify(out));
+    } catch (e) { /* file non leggibile: lasciato com'e' */ }
+  }
+  DOCTORS = items.map((it) => it.name);
+  localStorage.setItem(DOCTORS_KEY, JSON.stringify(DOCTORS));
+  undoStack.length = 0;
+  load();
+  render();
+  return true;
+}
+
+// ---------- Rendering ----------
+function cellHtml(i, d, half) {
+  const e = entry(i, d);
+  const merged = MERGED.includes(e.m);
+  const g = e.g || [];
+  const txt = e[half] || "";
+  const shown = merged ? (e.cont ? "-" : e.m) + (g.length ? "#" : "") : txt + (g.includes(half) && txt ? "#" : "");
+  const color = COLORS[txt] || "#000";
+  const label = esc(shown);
+  return `<td class="c${isWeekend(d) ? " we" : ""}" data-i="${i}" data-d="${d}" data-h="${half}"` +
+    `${merged ? ' rowspan="2"' : ""} style="color:${color}">${label}</td>`;
+}
+
+function render() {
+  const nd = ndays();
+  $("ptitle").textContent = `U.O.C. di Anestesia e Rianimazione - ${MESI[state.month - 1].toUpperCase()} ${state.year}`;
+  document.title = `Moreno - ${MESI[state.month - 1]} ${state.year}`;
+  const miss = missingCoverage();
+  let h = "<thead><tr><th class='corner'>Medico</th>";
+  for (let d = 1; d <= nd; d++) {
+    const hn = holidayName(d);
+    let tip = hn || "";
+    if (miss[d]) tip += (tip ? "\n" : "") + "Manca: " + miss[d].join(", ");
+    h += `<th class="hd${isRed(d) ? " red" : ""}" data-hd="${d}"${tip ? ` title="${esc(tip)}"` : ""}>${WD[weekday(d)]}\n${d}${miss[d] ? ' <span class="warn">\u26a0</span>' : ""}</th>`;
+  }
+  h += "<th class='tot'>Ore</th></tr></thead><tbody>";
+  DOCTORS.forEach((name, i) => {
+    if (!name) {
+      h += "<tr class='sep'><td class='name'></td>";
+      for (let d = 1; d <= nd; d++) h += `<td data-note="${d}" title="${esc(state.notes[d] || "")}">${esc(state.notes[d] || "")}</td>`;
+      h += "<td class='tot'></td></tr>";
+      return;
+    }
+    const { total, ngett } = calcRow(i);
+    h += `<tr><td class="name" rowspan="2">${esc(name)}</td>`;
+    for (let d = 1; d <= nd; d++) h += cellHtml(i, d, "m");
+    h += `<td class="tot${total >= TARGET ? " ok" : ""}" rowspan="2">${fmt(total)} / ${fmt(TARGET)}${ngett ? `\n${ngett} gettoni` : ""}</td></tr><tr>`;
+    for (let d = 1; d <= nd; d++) if (!MERGED.includes(entry(i, d).m)) h += cellHtml(i, d, "p");
+    h += "</tr>";
+  });
+  h += "</tbody><tfoot>";
+  for (const [k, code] of [[0, "SO"], [1, "SOP"]]) h += footRow(code, false, nd);
+  for (const code of ["SO", "SOP"]) h += footRow(code, true, nd);
+  h += "</tfoot>";
+  $("grid").innerHTML = h;
+  refreshFooter();
+}
+
+function footRow(code, prog, nd) {
+  let h = `<tr><td class="name">${code} ${prog ? "programmate" : "assegnate"}</td>`;
+  for (let d = 1; d <= nd; d++) {
+    h += prog
+      ? `<td class="${isWeekend(d) ? "we" : ""}" data-pc="${code}" data-pd="${d}"><input type="number" min="0" data-code="${code}" data-d="${d}" value="${state.prog[code][d] || ""}"></td>`
+      : `<td data-ac="${code}" data-ad="${d}"></td>`;
+  }
+  return h + `<td data-${prog ? "pt" : "at"}="${code}"></td></tr>`;
+}
+
+function assigned(code, d) {
+  let n = 0;
+  for (const j in state.data) { const e = entry(+j, d); if (e.m === code || e.p === code) n++; }
+  return n;
+}
+
+function refreshFooter() {
+  const nd = ndays();
+  for (const code of ["SO", "SOP"]) {
+    let ta = 0, tp = 0;
+    for (let d = 1; d <= nd; d++) {
+      const a = assigned(code, d), p = state.prog[code][d] || 0;
+      ta += a; tp += p;
+      const ca = document.querySelector(`[data-ac="${code}"][data-ad="${d}"]`);
+      const cp = document.querySelector(`[data-pc="${code}"][data-pd="${d}"]`);
+      ca.textContent = a || "";
+      ca.classList.toggle("bad", a !== p);
+      cp.classList.toggle("bad", a !== p);
+    }
+    const at = document.querySelector(`[data-at="${code}"]`), pt = document.querySelector(`[data-pt="${code}"]`);
+    at.textContent = ta; pt.textContent = tp;
+    at.classList.toggle("bad", ta !== tp);
+    pt.classList.toggle("bad", ta !== tp);
+  }
+}
+
+// ---------- Eventi ----------
+function cellOf(ev) {
+  const td = ev.target.closest && ev.target.closest("td.c");
+  return td ? { i: +td.dataset.i, d: +td.dataset.d, h: td.dataset.h } : null;
+}
+
+$("grid").addEventListener("mousedown", (ev) => {
+  if (ev.button !== 0) return;
+  const c = cellOf(ev);
+  dragStart = c && CONTINUABLE.includes(entry(c.i, c.d).m) ? c : null;
+});
+document.addEventListener("mouseup", (ev) => {
+  const start = dragStart;
+  dragStart = null;
+  if (!start || ev.button !== 0) return;
+  const c = cellOf(ev);
+  if (c && c.i === start.i && c.d > start.d) {
+    suppressClick = true;
+    setTimeout(() => { suppressClick = false; }, 50);
+    fillContinue(start.i, start.d, c.d);
+  }
+});
+$("grid").addEventListener("click", (ev) => {
+  if (suppressClick) { suppressClick = false; return; }
+  hideMenu();
+  const note = ev.target.closest && ev.target.closest("td[data-note]");
+  if (note) { ev.stopPropagation(); noteMenu(+note.dataset.note, ev.clientX, ev.clientY); return; }
+  const hd = ev.target.closest && ev.target.closest("th[data-hd]");
+  if (hd) { ev.stopPropagation(); headerMenu(+hd.dataset.hd, ev.clientX, ev.clientY); return; }
+  const c = cellOf(ev);
+  if (c) { ev.stopPropagation(); cellMenu(c.i, c.d, c.h, ev.clientX, ev.clientY); }
+});
+$("grid").addEventListener("contextmenu", (ev) => {
+  const c = cellOf(ev);
+  if (c) { ev.preventDefault(); contextMenu(c.i, c.d, c.h, ev.clientX, ev.clientY); }
+});
+$("grid").addEventListener("focusin", (ev) => { if (ev.target.matches("input[data-code]")) pendingProg = snap(); });
+$("grid").addEventListener("change", (ev) => {
+  const t = ev.target;
+  if (!t.matches("input[data-code]")) return;
+  if (pendingProg) pushUndo(pendingProg);
+  pendingProg = snap();
+  const v = parseInt(t.value, 10);
+  if (v > 0) state.prog[t.dataset.code][+t.dataset.d] = v; else delete state.prog[t.dataset.code][+t.dataset.d];
+  refreshFooter();
+  save();
+});
+document.addEventListener("click", hideMenu);
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape") hideMenu();
+  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "z" && !ev.target.matches("input")) { ev.preventDefault(); undo(); }
+});
+
+function gotoMonth(y, m) {
+  while (m < 1) { m += 12; y--; }
+  while (m > 12) { m -= 12; y++; }
+  state.year = y; state.month = m;
+  $("mese").value = m; $("anno").value = y;
+  undoStack.length = 0;
+  load();
+  render();
+}
+
+$("mese").innerHTML = MESI.map((n, i) => `<option value="${i + 1}">${n}</option>`).join("");
+$("mese").onchange = () => gotoMonth(+$("anno").value, +$("mese").value);
+$("anno").onchange = () => gotoMonth(+$("anno").value || state.year, +$("mese").value);
+$("prev").onclick = () => gotoMonth(state.year, state.month - 1);
+$("next").onclick = () => gotoMonth(state.year, state.month + 1);
+$("undo").onclick = undo;
+$("print").onclick = () => window.print();
+window.addEventListener("beforeprint", () => {
+  if ($("wk").style.display === "block") return;
+  const g = $("grid"), wrap = g.parentElement;
+  const nrows = g.tBodies[0] ? g.tBodies[0].rows.length : 0;
+  const est = 28 + 30 + nrows * 16 + 14 + 6 * 19 + 10;
+  wrap.style.zoom = est > 1040 ? String(1040 / est) : "";
+});
+window.addEventListener("afterprint", () => { $("grid").parentElement.style.zoom = ""; });
+// ---------- Turno settimanale ----------
+const WEEK_KEY = "turni_settimane";
+const SPECS = ["ORL", "GIN", "CHIR GEN", "URO", "CHIR VASC", "ORT sala B", "ORT sala A"];
+const SPEC_NAMES = { "ORL": "O.R.L.", "GIN": "GINECOLOGIA", "CHIR GEN": "CHIRURGIA", "URO": "UROLOGIA",
+  "CHIR VASC": "CHIR./VASC.", "ORT sala A": "ORTOPEDIA A", "ORT sala B": "ORTOPEDIA B" };
+const WEEK_SCHEMA = [
+  { SO: ["ORL", "CHIR GEN", "URO", "ORT sala A"], SOP: ["URO", "ORT sala A"] },
+  { SO: ["ORL", "GIN", "CHIR VASC", "ORT sala A"], SOP: ["URO", "ORT sala A"] },
+  { SO: ["CHIR GEN", "URO", "ORT sala B", "ORT sala A"], SOP: ["URO", "ORL"] },
+  { SO: ["ORL", "CHIR GEN", "URO", "ORT sala A"], SOP: ["URO"] },
+  { SO: ["ORL", "CHIR GEN", "URO", "ORT sala A"], SOP: [] },
+  { SO: [], SOP: [] }, { SO: [], SOP: [] }];
+const WEEK_ROWS = [["RIA_M", ["RM", "RG"]], ["RIA_P", ["RG"]], ["RN", ["RN"]], ["U", ["U"]], ["AG", ["AG"]],
+  ["AGP", ["AGP"]], ["AN", ["AN"]], ["P", ["P"]], ["TA", ["TA"]], ["TAP", ["TAP"]]];
+const WEEK_REQUIRED = ["RM", "RG", "RN", "U", "AG", "AGP", "AN"];
+const GIORNI = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"];
+const wk = { store: {}, monday: null, months: {}, days: [], rows: [], auto: {}, pool: {} };
+const isoDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+function weekHas(c, m, p) { return c === "TA" ? m === "TA" : c === "TAP" ? p === "TA" : (c === m || c === p); }
+function wkMonth(y, m) {
+  const k = `${y}_${String(m).padStart(2, "0")}`;
+  if (!(k in wk.months)) {
+    try { wk.months[k] = JSON.parse(localStorage.getItem("turni_" + k)) || {}; } catch (e) { wk.months[k] = {}; }
+  }
+  return wk.months[k];
+}
+function wkEntries(d) {
+  const raw = wkMonth(d.getFullYear(), d.getMonth() + 1), out = [];
+  for (const name in raw) {
+    if (name.startsWith("__")) continue;
+    const e = (raw[name] || {})[d.getDate()];
+    if (e) out.push([name, e.m, e.p === "AG pom" ? "AGP" : e.p]);
+  }
+  return out;
+}
+function wkIsOff(d) {
+  const g = d.getDay();
+  if (g === 0 || g === 6 || holidays(d.getFullYear())[`${d.getMonth() + 1}-${d.getDate()}`]) return true;
+  return d.getDate() in (wkMonth(d.getFullYear(), d.getMonth() + 1).__festivi__ || {});
+}
+function wkExpected(c, d) {
+  const off = wkIsOff(d);
+  if (c === "RM" || c === "U" || c === "AGP") return !off;
+  if (c === "AG") return off;
+  return true;
+}
+const wkWeek = () => (wk.store[isoDate(wk.monday)] ||= {});
+const wkSpecs = () => wkWeek().specs || SPECS;
+function wkSave() { localStorage.setItem(WEEK_KEY, JSON.stringify(wk.store)); }
+function wkSpecOf(kind, d, name) {
+  const v = (wkWeek().assign || {})[`${kind}|${isoDate(d)}|${name}`];
+  if (v === undefined) return wk.auto[`${kind}|${isoDate(d)}|${name}`] || null;
+  return wkSpecs().includes(v) ? v : null;
+}
+function wkRowCells(kind, label) {
+  const r = wk.rows.find((x) => x.kind === kind && x.label === label);
+  return r ? r.cells : [[], [], [], [], [], [], []];
+}
+
+function wkCompute() {
+  const days = Array.from({ length: 7 }, (_, k) => addDays(wk.monday, k));
+  wk.days = days;
+  const ents = days.map(wkEntries), week = wkWeek(), specs = wkSpecs(), miss = week.missing || [];
+  const rows = [];
+  for (const [key, codes] of WEEK_ROWS) {
+    const cells = days.map((d, k) => {
+      const names = ents[k].filter(([n, m, p]) => codes.some((c) => weekHas(c, m, p))).map((x) => x[0]);
+      for (const c of codes) {
+        if (WEEK_REQUIRED.includes(c) && wkExpected(c, d) && !ents[k].some(([n, m, p]) => weekHas(c, m, p))) {
+          names.push(miss.includes(`${c}|${isoDate(d)}`) ? "/" : "?");
+        }
+      }
+      return names;
+    });
+    rows.push({ kind: "g", label: key, cells });
+  }
+  wk.pool = {};
+  for (const kind of ["SO", "SOP"]) {
+    wk.pool[kind] = ents.map((e) => e.filter(([n, m, p]) => (kind === "SO" ? m === "SO" : p === "SOP")).map((x) => x[0]));
+  }
+  wk.auto = {};
+  const assign = week.assign || {};
+  for (const kind of ["SO", "SOP"]) {
+    days.forEach((d, k) => {
+      const names = wk.pool[kind][k];
+      const key = (n) => `${kind}|${isoDate(d)}|${n}`;
+      const occupied = new Set(names.filter((n) => key(n) in assign).map((n) => assign[key(n)]));
+      const free = WEEK_SCHEMA[k][kind].filter((s) => specs.includes(s) && !occupied.has(s));
+      names.filter((n) => !(key(n) in assign)).forEach((n, j) => { if (j < free.length) wk.auto[key(n)] = free[j]; });
+    });
+  }
+  for (const s of specs) {
+    for (const kind of ["SO", "SOP"]) {
+      rows.push({ kind, label: s, cells: days.map((d, k) => wk.pool[kind][k].filter((n) => wkSpecOf(kind, d, n) === s)) });
+    }
+  }
+  for (const kind of ["SO", "SOP"]) {
+    rows.push({ kind, label: null, cells: days.map((d, k) => wk.pool[kind][k].filter((n) => wkSpecOf(kind, d, n) === null)) });
+  }
+  wk.rows = rows;
+  const ag = rows.find((r) => r.kind === "g" && r.label === "AG").cells;
+  for (const r of rows) {
+    if (r.kind === "g" && (r.label === "U" || r.label === "AGP")) r.cells = r.cells.map((c, k) => (wkExpected("AG", days[k]) ? ag[k] : c));
+  }
+  const ov = week.override || {};
+  wk.ovr = new Set();
+  for (const r of rows) {
+    const rk = r.kind === "g" ? r.label : `${r.kind}:${r.label || ""}`;
+    r.cells = r.cells.map((c, k) => {
+      const v = ov[`${rk}|${isoDate(days[k])}`];
+      if (v === undefined) return c;
+      wk.ovr.add(`${rk}|${k}`);
+      return v.split("\n").map((x) => x.trim()).filter(Boolean);
+    });
+  }
+}
+function wkRowKey(t) {
+  const p = t.split(":");
+  return p[0] === "g" ? p[1] : `${p[1]}:${p[2] || ""}`;
+}
+
+function wkRender() {
+  wkCompute();
+  const { days, rows } = wk, specs = wkSpecs();
+  const off = days.map(wkIsOff);
+  const g = (key) => rows.find((r) => r.kind === "g" && r.label === key).cells;
+  const mon = days[0];
+  $("wk-lbl").textContent = `  Settimana dal ${days[0].toLocaleDateString("it-IT")} al ${days[6].toLocaleDateString("it-IT")}  `;
+  const cell = (names, cls, t, k, bold) => {
+    const mark = names.includes("?") ? " miss" : "";
+    const u = wk.ovr.has(wkRowKey(t) + "|" + k) ? ' style="text-decoration:underline"' : "";
+    return `<td class="c ${cls || ""}${mark}" data-t="${t}" data-c="${k}"${bold === false ? ' style="font-weight:400"' : u}>${esc(names.join("\n")).toUpperCase().replace(/\n/g, "<br>")}</td>`;
+  };
+  let h = `<colgroup><col style="width:4.5%"><col style="width:12.5%"><col style="width:7%">${'<col style="width:10.8%">'.repeat(7)}</colgroup>`;
+  h += `<tr class="hd"><th colspan="3" class="cy rd big">${MESI[mon.getMonth()].toUpperCase()} ${mon.getFullYear()}</th>` +
+    days.map((d, k) => `<th class="${off[k] ? "ye rd" : "cy"}"><span style="font-weight:${off[k] ? 700 : 400};font-size:15px">${GIORNI[k]}</span><br><span style="font-size:15px">${d.getDate()}</span></th>`).join("") + "</tr>";
+  const rg = g("RIA_P");
+  const rm = g("RIA_M").map((l, k) => { const r = [...l]; for (const n of rg[k]) { const j = r.indexOf(n); if (j >= 0) r.splice(j, 1); } return r; });
+  const top = [
+    ["RIANIMAZIONE<br>GIORNO", "8-14", "RIA_M", "", true, (k) => (wk.ovr.has("RIA_M|" + k) ? g("RIA_M")[k] : [...rg[k], ...rm[k]].join(" – ").split("\n")), "ria"],
+    ["", "14-20", "RIA_P", "", false, (k) => rg[k], "ria"],
+    ["GU. RIANIM. NOTTE", "20-8", "RN", "gr", false, (k) => g("RN")[k], ""],
+    ["URGENZE", "8-14", "U", "ye", false, (k) => g("U")[k], ""],
+    ["ANESTESIA<br>POMERIGGIO", "14-20", "AGP", "", false, (k) => g("AGP")[k], ""],
+    ["GU. ANEST. NOTTE", "20-8", "AN", "gr", false, (k) => g("AN")[k], ""]];
+  for (const [lab, tm, key, bg, span2, fn] of top) {
+    const bt = ["RIA_M", "RN", "U", "AGP", "AN"].includes(key) ? "bt" : (key === "RIA_P" ? "dt" : "");
+    h += `<tr class="${bt}">`;
+    if (key === "RIA_M") h += `<td colspan="2" rowspan="2" class="lab">${lab}</td>`;
+    else if (key !== "RIA_P") h += `<td colspan="2" class="lab ${bg} ${key === "U" ? "rd" : ""}">${lab}</td>`;
+    h += `<td class="t ${bg}">${tm}</td>`;
+    for (let k = 0; k < 7; k++) {
+      const names = fn(k);
+      const cbg = off[k] && ["U", "AGP", "RIA_M", "RIA_P"].includes(key) ? "ye" : (key === "RN" || key === "AN" ? "gr" : (key === "U" ? "ye" : ""));
+      h += cell(names, cbg, "g:" + (key === "RIA_M" || key === "RIA_P" ? key : key), k);
+    }
+    h += "</tr>";
+  }
+  h += `<tr class="gap"><td colspan="10"></td></tr>`;
+  specs.forEach((s, i) => {
+    for (const [j, kind] of ["SO", "SOP"].entries()) {
+      const cells = wkRowCells(kind, s);
+      h += `<tr class="${j === 0 ? "bt" : "dt"}">`;
+      if (j === 0) h += `<td rowspan="2" class="lab">${i + 1}</td><td rowspan="2" class="lab">${esc(SPEC_NAMES[s] || s.toUpperCase())}</td>`;
+      h += `<td class="t">${kind === "SO" ? "8-14.30" : "14-20"}</td>`;
+      for (let k = 0; k < 7; k++) {
+        const names = cells[k];
+        if (!names.length && off[k]) { h += `<td class="c" data-t="s:${kind}:${s}" data-c="${k}"></td>`; continue; }
+        h += names.length ? cell(names, "or", `s:${kind}:${s}`, k) : `<td class="c nb" data-t="s:${kind}:${s}" data-c="${k}">X</td>`;
+      }
+      h += "</tr>";
+    }
+  });
+  for (const kind of ["SO", "SOP"]) {
+    const cells = wkRowCells(kind, null);
+    if (!cells.some((c) => c.length)) continue;
+    h += `<tr class="bt"><td colspan="3" class="lab rd">DA ASSEGNARE ${kind === "SO" ? "MATTINA" : "POMERIGGIO"}</td>` +
+      cells.map((c, k) => cell(c, "rd", `s:${kind}:`, k)).join("") + "</tr>";
+  }
+  h += `<tr class="gap"><td colspan="10"></td></tr>`;
+  const hasTap = g("TAP").some((c) => c.length);
+  const bottom = [["P", "AMBULATORIO<br>POMERIGGIO", "14-20", "or"], ["TA", "TERAPIA ANTALGICA", "8-14", "gn"]];
+  if (hasTap) bottom.push(["TAP", "TERAPIA ANTALGICA<br>POMERIGGIO", "14-20", "gn"]);
+  bottom.forEach(([key, lab, tm, bg], i) => {
+    h += `<tr class="${i === 0 ? "bt" : ""}"><td colspan="2" class="lab ${key === "P" ? "" : bg}">${lab}</td><td class="t">${tm}</td>`;
+    for (let k = 0; k < 7; k++) {
+      const names = g(key)[k];
+      const t = `data-t="g:${key}" data-c="${k}"`;
+      if (!names.length && off[k]) { h += `<td class="c" ${t}></td>`; continue; }
+      h += `<td class="c ${bg}" ${t}>${esc(names.length ? names.join("\n") : "---").toUpperCase().replace(/\n/g, "<br>")}</td>`;
+    }
+    h += "</tr>";
+  });
+  $("wk-table").innerHTML = h;
+}
+
+function wkMove(kind, d, name, spec) {
+  (wkWeek().assign ||= {})[`${kind}|${isoDate(d)}|${name}`] = spec || "-";
+  wkSave(); wkRender();
+}
+function wkSwap(kind, d, a, aSpec, b, bSpec) {
+  const as = (wkWeek().assign ||= {});
+  as[`${kind}|${isoDate(d)}|${a}`] = bSpec || "-";
+  as[`${kind}|${isoDate(d)}|${b}`] = aSpec || "-";
+  wkSave(); wkRender();
+}
+function wkClick(ev) {
+  const td = ev.target.closest && ev.target.closest("td.c");
+  if (!td) return;
+  ev.stopPropagation();
+  hideMenu();
+  const c = +td.dataset.c, day = wk.days[c], parts = td.dataset.t.split(":");
+  if (wk.ovr.has(wkRowKey(td.dataset.t) + "|" + c)) return;
+  if (parts[0] === "g") {
+    const rkey = (parts[1] === "U" || parts[1] === "AGP") && wkExpected("AG", day) ? "AG" : parts[1];
+    const row = WEEK_ROWS.find((r) => r[0] === rkey);
+    const ents = wkEntries(day), week = wkWeek(), list = (week.missing ||= []);
+    const miss = row[1].filter((x) => WEEK_REQUIRED.includes(x) && wkExpected(x, day) && !ents.some(([n, m, p]) => weekHas(x, m, p)));
+    const dm = `${day.getDate()}/${day.getMonth() + 1}`;
+    for (const x of miss) {
+      const key = `${x}|${isoDate(day)}`;
+      if (list.includes(key)) { if (confirm(`Annullare la conferma di ${x} mancante il ${dm}?`)) list.splice(list.indexOf(key), 1); }
+      else if (confirm(`Nel mensile manca ${x} il ${dm}.\nHai verificato che siamo una persona in meno? Segno "/".`)) list.push(key);
+    }
+    if (miss.length) { wkSave(); wkRender(); }
+    return;
+  }
+  const kind = parts[0] === "s" ? parts[1] : null, label = parts[2] || null;
+  if (!kind) return;
+  const cells = wkRowCells(kind, label)[c], specs = wkSpecs(), items = [];
+  if (!cells.length && label) {
+    for (const n of wkRowCells(kind, null)[c]) items.push({ label: `Assegna ${n}`, action: () => wkMove(kind, day, n, label) });
+  } else {
+    for (const name of cells) {
+      items.push({ label: name, disabled: true });
+      for (const s of [...specs, null]) {
+        if (s === label) continue;
+        const others = s ? wkRowCells(kind, s)[c] : [];
+        if (others.length) for (const o of others) items.push({ label: `    Scambia con ${s}: ${o}`, action: () => wkSwap(kind, day, name, label, o, s) });
+        else items.push({ label: `    Sposta in ${s || "Da assegnare"}`, action: () => wkMove(kind, day, name, s) });
+      }
+    }
+  }
+  if (items.length) showMenu(ev.clientX, ev.clientY, items);
+}
+function wkOpen() {
+  save();
+  wk.months = {};
+  try { wk.store = JSON.parse(localStorage.getItem(WEEK_KEY)) || {}; } catch (e) { wk.store = {}; }
+  const d = new Date(state.year, state.month - 1, Math.min(today.getDate(), ndays()));
+  wk.monday = addDays(d, -((d.getDay() + 6) % 7));
+  $("wk").style.display = "block";
+  wkRender();
+}
+$("weekly").onclick = wkOpen;
+$("wk-close").onclick = () => { $("wk").style.display = "none"; hideMenu(); };
+$("wk-prev").onclick = () => { wk.monday = addDays(wk.monday, -7); wkRender(); };
+$("wk-next").onclick = () => { wk.monday = addDays(wk.monday, 7); wkRender(); };
+$("wk-print").onclick = () => window.print();
+$("wk-table").addEventListener("click", wkClick);
+$("wk-table").addEventListener("contextmenu", (ev) => {
+  const td = ev.target.closest && ev.target.closest("td.c");
+  if (!td) return;
+  ev.preventDefault();
+  const c = +td.dataset.c, day = wk.days[c], rk = wkRowKey(td.dataset.t), key = `${rk}|${isoDate(day)}`;
+  const over = wk.ovr.has(`${rk}|${c}`);
+  const cur = (wk.rows.find((r) => (r.kind === "g" ? r.label : `${r.kind}:${r.label || ""}`) === rk) || { cells: [] }).cells[c] || [];
+  const dlg = showDialog(`<b>Modifica a mano - ${day.getDate()}/${day.getMonth() + 1}</b>
+    <div class="row"><span>Un nome per riga. Scrivi - per lasciare vuoto; svuota per tornare all'automatico.</span></div>
+    <textarea id="ov-t" rows="4" style="width:100%">${esc(cur.filter((x) => x !== "?" && x !== "/").join("\n"))}</textarea>
+    <div class="row"><button id="ov-save">Salva</button>${over ? '<button id="ov-reset">Ripristina automatico</button>' : ""}</div>`);
+  const base = dlg.onclick;
+  dlg.onclick = (e2) => {
+    base(e2);
+    if (e2.target.id !== "ov-save" && e2.target.id !== "ov-reset") return;
+    const o = (wkWeek().override ||= {}), v = $("ov-t").value.trim();
+    if (e2.target.id === "ov-save" && v) o[key] = v; else delete o[key];
+    dlg.close(); wkSave(); wkRender();
+  };
+});
+$("wk-specs").onclick = (ev) => {
+  ev.stopPropagation();
+  const cur = wkSpecs();
+  const dlg = showDialog(`<b>Specialità della settimana</b>` + SPECS.map((s) =>
+    `<div class="row"><label><input type="checkbox" value="${s}"${cur.includes(s) ? " checked" : ""}> ${esc(SPEC_NAMES[s])}</label></div>`).join(""));
+  dlg.onchange = () => {
+    wkWeek().specs = SPECS.filter((s) => dlg.querySelector(`input[value="${s}"]`).checked);
+    wkSave(); wkRender();
+  };
+};
+$("wk-reset").onclick = (ev) => {
+  ev.stopPropagation();
+  const r = ev.currentTarget.getBoundingClientRect();
+  showMenu(r.left, r.bottom, [
+    { label: "Ripristina automatico", action: () => { delete wkWeek().assign; wkSave(); wkRender(); } },
+    { label: "Svuota tutto", action: () => {
+      const a = {};
+      wk.days.forEach((d, k) => { for (const kind of ["SO", "SOP"]) for (const n of wk.pool[kind][k]) a[`${kind}|${isoDate(d)}|${n}`] = "-"; });
+      wkWeek().assign = a; wkSave(); wkRender(); } }]);
+};
+window.addEventListener("beforeprint", () => {
+  if ($("wk").style.display !== "block") return;
+  document.body.classList.add("wkprint");
+  const st = document.createElement("style");
+  st.id = "wkpage";
+  st.textContent = "@page { size: A4 landscape; margin: 8mm; }";
+  document.head.appendChild(st);
+  const t = $("wk-table");
+  t.style.zoom = "";
+  const hgt = t.offsetHeight + 30;
+  if (hgt > 700) t.style.zoom = String(700 / hgt);
+});
+window.addEventListener("afterprint", () => {
+  document.body.classList.remove("wkprint");
+  const st = $("wkpage");
+  if (st) st.remove();
+  $("wk-table").style.zoom = "";
+});
+$("cov").onclick = coverageDialog;
+$("summ").onclick = summaryDialog;
+$("docs").onclick = doctorsDialog;
+$("about").onclick = () => showDialog(`<div style="text-align:center;line-height:1.5;max-width:420px">
+<h2 style="margin:0">Moreno</h2>
+<p><b>Pianificatore turni medici</b><br>U.O.C. di Anestesia e Rianimazione</p>
+<p>Versione 2.0 (versione web)</p>
+<p>Sviluppato da <b>Ill.mo Software</b></p>
+<p>&copy; 2026 Ill.mo Software. Tutti i diritti riservati.</p>
+<p style="font-size:12px;color:#555">I dati sono salvati solo in questo browser, su questo computer. Usa "Esporta file" per fare copie di sicurezza.
+Il software &egrave; fornito &laquo;cos&igrave; com'&egrave;&raquo;, senza garanzie di alcun tipo.
+Verifica sempre i turni prima della stampa e della pubblicazione.</p>
+<p style="font-size:12px;color:#555"><i>Made with Moreno &copy;</i></p></div>`);
+$("help").onclick = () => showDialog(`<div style="max-height:75vh;overflow:auto;line-height:1.4">
+<h2 style="margin-top:0">Manuale rapido</h2>
+<h3>Inserire i turni</h3><ul>
+<li>Ogni medico ha due met\u00e0 per giorno: <b>in alto mattina</b>, <b>in basso pomeriggio</b>.</li>
+<li><b>Clic</b> su una casella: appare l'elenco dei turni possibili. "Altro" permette una sigla libera.</li>
+<li><b>Tasto destro</b> su un turno: elimina il turno o aggiungi/rimuovi il gettone (#).</li>
+<li>Ferie, L.104, Mal, Agg: dopo il primo giorno scegli "-" (continua) oppure trascina il mouse verso destra sui giorni successivi.</li>
+<li>Clic sulla riga grigia: aggiunge una nota al giorno (es. "Bimbi").</li>
+<li>Clic sull'intestazione di un giorno: imposta o rimuove un <b>festivo locale</b>.</li></ul>
+<h3>Sigle e ore</h3><ul>
+<li>Mattina da sola 7 h; pomeriggio sempre 6 h; mattina + pomeriggio 12 h; guardie (RG, AG, RN, AN) 12 h.</li>
+<li>F, L.104, Agg, Mal contano 6h20 (0 h di domenica e nei festivi); "/" (riposo) 0 h.</li>
+<li>Il gettone (#) toglie 6 h su un turno singolo, 12 h su una guardia. Obiettivo mensile: 152 h.</li>
+<li>In fondo allo schermo, le righe SO/SOP "assegnate" e "programmate" si confrontano: diventano rosse se non coincidono. I numeri programmati si scrivono a mano.</li></ul>
+<h3>Regole automatiche</h3><ul>
+<li>RM, RG, RN, U, AG e AGP non possono essere assegnati a due medici lo stesso giorno (nel menu appare il nome di chi li ha gi\u00e0).</li>
+<li>Dopo una notte (RN/AN) il giorno dopo si possono scegliere solo "/", RN, AN.</li></ul>
+<h3>Controlli</h3><ul>
+<li><b>Controlla copertura</b>: elenca i giorni in cui manca una guardia. Il simbolo \u26a0 compare anche sull'intestazione del giorno.</li>
+<li>Lun-ven servono RM, RG, RN, U, AGP, pi\u00f9 TA al mattino e P al pomeriggio. Sabato, domenica e festivi servono RG, RN, AG.</li>
+<li><b>Riepilogo</b>: per ogni medico guardie, festivi, gettoni, assenze, ore e differenza dalle 152 h.</li>
+<li><b>Medici</b>: aggiungi, rinomina, rimuovi o sposta i medici (vale per tutti i mesi).</li></ul>
+<h3>Turno settimanale</h3><ul>
+<li>Il pulsante <b>Settimanale</b> apre la settimana (luned\u00ec-domenica) con guardie, ambulatori e sale operatorie, mattina e pomeriggio.</li>
+<li>Le sale (SO al mattino, SOP al pomeriggio) si compilano da sole in base ai turni del mese; i medici si possono cambiare dal menu a scomparsa.</li>
+<li>Un "?" rosso indica una guardia obbligatoria mancante: con un clic puoi confermare che resta scoperta ("/").</li>
+<li>Nel fine settimana il medico AG 12 ore compare sia al mattino sia al pomeriggio.</li>
+<li><b>Tasto destro</b> su una casella: forzare qualsiasi valore (un nome per riga, "-" per svuotare) o ripristinare quello automatico. Le caselle forzate sono sottolineate.</li>
+<li>Puoi ripristinare l'assegnazione automatica o svuotare tutte le sale; c'\u00e8 anche l'ambulatorio TA del pomeriggio.</li>
+<li>La stampa \u00e8 in A4 orizzontale. I dati settimanali restano nel browser, come quelli mensili.</li></ul>
+<h3>Colori delle sigle</h3><ul>
+<li>Rosso: RG, RM, RN, AG, AGP, AN, U. Blu: TA. Verde: SO, SOP. Viola: P. Nero: tutte le altre. Gli stessi colori valgono in stampa.</li></ul>
+<h3>Salvataggio e stampa</h3><ul>
+<li>Il salvataggio \u00e8 automatico, <b>nel browser in uso</b>: aprendo il file con un altro browser o un altro PC i dati non ci sono. Usa "Esporta file" e "Importa file" per spostarli o per fare una copia.</li>
+<li>"Backup": copie automatiche (una ogni 10 minuti al massimo), ripristinabili o scaricabili.</li>
+<li><b>Annulla (Ctrl+Z)</b> annulla l'ultima modifica.</li>
+<li><b>Stampa / PDF</b>: pagina A3 orizzontale con la legenda. Nella finestra di stampa scegli "Salva come PDF" e togli la spunta a "Intestazioni e pi\u00e8 di pagina".</li></ul></div>`, true);
+$("export").onclick = () => download(`turni_${ym()}.json`, JSON.stringify(serialize(), null, 1));
+$("import").onclick = () => $("file").click();
+$("file").onchange = () => {
+  const f = $("file").files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const raw = JSON.parse(r.result);
+      pushUndo();
+      deserialize(raw);
+      changed();
+    } catch (e) { alert("File non valido."); }
+    $("file").value = "";
+  };
+  r.readAsText(f);
+};
+$("clear").onclick = () => {
+  if (!confirm(`Cancellare tutti i turni di ${MESI[state.month - 1]} ${state.year}?\nPuoi annullare con Ctrl+Z.`)) return;
+  backupIfNeeded(true);
+  pushUndo();
+  state.data = {}; state.notes = {}; state.hol = {}; state.prog = { SO: {}, SOP: {} };
+  changed();
+};
+$("backups").onclick = () => {
+  const dlg = $("dlg");
+  dlg.className = ""; dlg.onchange = null;
+  const keys = backupKeys().reverse();
+  dlg.innerHTML = `<b>Backup di ${MESI[state.month - 1]} ${state.year}</b><p>Copie automatiche (al massimo una ogni 10 minuti, ultime ${BACKUP_KEEP}).</p>` +
+    (keys.length ? keys.map((k, n) => `<div class="row"><span>${new Date(+k.split("|")[2]).toLocaleString("it-IT")}</span>` +
+      `<button data-r="${n}">Ripristina</button><button data-s="${n}">Scarica</button></div>`).join("") : "<p>Nessun backup.</p>") +
+    `<div class="row"><button id="bk-now">Crea backup ora</button><span></span><button id="bk-close">Chiudi</button></div>`;
+  dlg.onclick = (ev) => {
+    const t = ev.target;
+    if (t.id === "bk-close") dlg.close();
+    else if (t.id === "bk-now") { backupIfNeeded(true); dlg.close(); $("backups").click(); }
+    else if (t.dataset.s !== undefined) download(`backup_${ym()}.json`, localStorage.getItem(keys[+t.dataset.s]));
+    else if (t.dataset.r !== undefined && confirm("Ripristinare questo backup al posto dei dati attuali?")) {
+      pushUndo();
+      deserialize(JSON.parse(localStorage.getItem(keys[+t.dataset.r])));
+      changed();
+      dlg.close();
+    }
+  };
+  dlg.showModal();
+};
+
+gotoMonth(state.year, state.month);
+</script>
+</body>
+</html>

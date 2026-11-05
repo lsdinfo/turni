@@ -25,7 +25,8 @@ ABOUT_HTML = f"""
 <p style="font-size:small">I dati sono salvati solo sul tuo computer (o chiavetta), nella cartella del programma.
 Il software &egrave; fornito &laquo;cos&igrave; com'&egrave;&raquo;, senza garanzie di alcun tipo.
 Verifica sempre i turni prima della stampa e della pubblicazione.</p>
-<p style="font-size:small">Realizzato con Python e Qt (PySide6).</p>
+<p style="font-size:small">Realizzato con Python e Qt (PySide6).<br>Include turno mensile, turno settimanale e stampa PDF.</p>
+<p style="font-size:small"><i>Made with Moreno &copy;</i></p>
 """
 
 MANUAL_HTML = """
@@ -53,15 +54,29 @@ MANUAL_HTML = """
 <h3>Controlli</h3>
 <ul>
 <li><b>Controlla copertura</b>: elenca i giorni in cui manca una guardia. Il simbolo \u26a0 compare anche sull'intestazione del giorno.</li>
-<li>Lun-ven servono RM, RG, RN, U, AGP. Sabato, domenica e festivi servono RG, RN, AG.</li>
+<li>Lun-ven servono RM, RG, RN, U, AGP, pi\u00f9 TA al mattino e P al pomeriggio. Sabato, domenica e festivi servono RG, RN, AG.</li>
 <li><b>Riepilogo</b>: per ogni medico guardie, festivi, gettoni, assenze, ore e differenza dalle 152 h.</li>
 <li><b>Medici</b>: aggiungi, rinomina, rimuovi o sposta i medici (vale per tutti i mesi).</li>
+</ul>
+<h3>Turno settimanale</h3>
+<ul>
+<li>Il pulsante <b>Settimanale</b> apre la settimana (luned\u00ec-domenica) con guardie, ambulatori e sale operatorie, mattina e pomeriggio.</li>
+<li>Le sale (SO al mattino, SOP al pomeriggio) si compilano da sole in base ai turni del mese; i medici si possono cambiare dal menu a scomparsa.</li>
+<li>Un "?" rosso indica una guardia obbligatoria mancante: con un clic puoi confermare che resta scoperta ("/").</li>
+<li>Nel fine settimana il medico AG 12 ore compare sia al mattino sia al pomeriggio.</li>
+<li><b>Tasto destro</b> su una casella: "Modifica a mano..." per forzare qualsiasi valore (un nome per riga, "-" per svuotare) oppure "Ripristina valore automatico". Le caselle forzate sono sottolineate.</li>
+<li>Puoi ripristinare l'assegnazione automatica o svuotare tutte le sale; c'\u00e8 anche l'ambulatorio TA del pomeriggio.</li>
+<li><b>Esporta PDF</b>: pagina A4 orizzontale pronta da stampare. I dati settimanali sono salvati in "turni_settimane.json".</li>
+</ul>
+<h3>Colori delle sigle</h3>
+<ul>
+<li>Rosso: RG, RM, RN, AG, AGP, AN, U. Blu: TA. Verde: SO, SOP. Viola: P. Nero: tutte le altre. Gli stessi colori valgono nel PDF.</li>
 </ul>
 <h3>Salvataggio e stampa</h3>
 <ul>
 <li>Il salvataggio \u00e8 automatico. Ogni mese ha il proprio file; le copie di sicurezza sono nella cartella "backup".</li>
 <li><b>Annulla (Ctrl+Z)</b> annulla l'ultima modifica.</li>
-<li><b>Esporta PDF</b>: pagina A3 orizzontale con la legenda.</li>
+<li><b>Esporta PDF</b>: pagina A3 orizzontale con la legenda; tutte le sigle hanno la stessa dimensione.</li>
 <li>I file si trovano nella stessa cartella del programma: per spostare i dati basta copiare la cartella.</li>
 </ul>
 """
@@ -276,6 +291,11 @@ class Planner(QTableWidget):
             miss = [c for c in UNIQUE if c not in have
                     and not (off and c in REQUIRED_WEEKDAY_ONLY)
                     and not (not off and c in REQUIRED_OFFDAY_ONLY)]
+            if not off:
+                if not any(e.get("m") == "TA" for (i, dd), e in self.data.items() if dd == d):
+                    miss.append("TA mattina")
+                if not any(e.get("p") == "P" for (i, dd), e in self.data.items() if dd == d):
+                    miss.append("P pomeriggio")
             if miss:
                 res[d] = miss
         return res
@@ -399,6 +419,25 @@ class Planner(QTableWidget):
             p.drawText(r, (Qt.AlignHCenter | Qt.AlignTop) if top else Qt.AlignCenter, text)
             p.setPen(Qt.black)
 
+        uni = 12.0
+        cw, hh = xs[2] - xs[1], half
+        for i, name in enumerate(DOCTORS):
+            if not name:
+                continue
+            for k in (0, 1):
+                for d in range(1, NDAYS + 1):
+                    t = self.item(i * 2 + k, COL_FIRST + d - 1).text()
+                    if not t:
+                        continue
+                    h_av = hh * 2 if self.entry(i, d).get("m") in MERGED else hh
+                    fnt = QFont("Segoe UI", 12, QFont.Bold)
+                    while fnt.pointSizeF() > 5:
+                        fm = QFontMetricsF(fnt, p.device())
+                        if (fm.horizontalAdvance(t) <= cw - 6
+                                and fm.height() * 0.85 <= h_av - 2):
+                            break
+                        fnt.setPointSizeF(fnt.pointSizeF() - 0.5)
+                    uni = min(uni, fnt.pointSizeF())
         y = title_h
         cell(0, y, head_h, "Medico", maxpt=14)
         for d in range(1, NDAYS + 1):
@@ -418,7 +457,7 @@ class Planner(QTableWidget):
             for d in range(1, NDAYS + 1):
                 if self.entry(i, d).get("m") in MERGED:
                     it = self.item(r, COL_FIRST + d - 1)
-                    cell(d, y, half * 2, it.text(), it.background().color(), it.foreground().color(), 12, True)
+                    cell(d, y, half * 2, it.text(), it.background().color(), it.foreground().color(), uni, True)
                     continue
                 e = self.entry(i, d)
                 for k in (0, 1):
@@ -427,7 +466,7 @@ class Planner(QTableWidget):
                 cell(d, y, half * 2, "")
                 for k in (0, 1):
                     it = self.item(r + k, COL_FIRST + d - 1)
-                    cell(d, y + k * half, half, it.text(), None, it.foreground().color(), 12, True, False)
+                    cell(d, y + k * half, half, it.text(), None, it.foreground().color(), uni, True, False)
             y += half * 2
         y += 20
         red, green, blue, purple = QColor("#e00000"), QColor("#00a000"), QColor("#0000e0"), QColor("#9000c0")
@@ -1555,14 +1594,14 @@ class Win(QMainWindow):
     def check_coverage(self):
         res = self.missing_coverage()
         if not res:
-            QMessageBox.information(self, "Controllo copertura", "Tutti i turni di guardia sono coperti.")
+            QMessageBox.information(self, "Controllo copertura", "Tutti i turni obbligatori sono coperti.")
             return
         giorni = ("lun", "mar", "mer", "gio", "ven", "sab", "dom")
         righe = [f"{giorni[datetime.date(YEAR, MONTH, d).weekday()]} {d}: manca {', '.join(m)}"
                  for d, m in res.items()]
         box = QMessageBox(self)
         box.setWindowTitle("Controllo copertura")
-        box.setText(f"{len(res)} giorni con turni di guardia mancanti.")
+        box.setText(f"{len(res)} giorni con turni mancanti.")
         box.setDetailedText("\n".join(righe))
         box.setInformativeText("\n".join(righe[:15]) + ("\n..." if len(righe) > 15 else ""))
         box.exec()
@@ -1815,6 +1854,7 @@ if __name__ == "__main__":
         sys.exit(0)
     w.show()
     sys.exit(app.exec())
+
 
 
 

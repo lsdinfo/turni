@@ -1,0 +1,13 @@
+__pycache__/
+dist/
+build/
+build_tmp/
+backup/
+*.spec
+*.pdf
+*.png
+turni_20*.json
+turni_data.json
+turni_settimane.json
+medici.json
+turni.py
