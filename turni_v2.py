@@ -203,7 +203,14 @@ def save_file():
 
 def base_dir():
     if getattr(sys, "frozen", False):
-        return os.path.dirname(sys.executable)
+        exe = os.path.dirname(sys.executable)
+        if os.path.exists(os.path.join(exe, "installed.flag")):
+            from PySide6.QtCore import QStandardPaths
+            docs = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
+            d = os.path.join(docs, "Turni")
+            os.makedirs(d, exist_ok=True)
+            return d
+        return exe
     return os.path.dirname(os.path.abspath(__file__))
 
 
