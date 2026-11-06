@@ -1768,8 +1768,11 @@ class Win(QMainWindow):
         return f
 
     def save_as(self):
-        path, _ = QFileDialog.getSaveFileName(self, "Salva turni", f"turni_{YEAR}_{MONTH:02d}.json", "Turni (*.json)")
+        path, _ = QFileDialog.getSaveFileName(self, "Salva turni", f"turni_{YEAR}_{MONTH:02d}_copia.json", "Turni (*.json)")
         if path:
+            if os.path.abspath(path) == os.path.abspath(save_file()):
+                QMessageBox.warning(self, "Salva con nome", "Questo \u00e8 il file di lavoro: scegli un altro nome o un'altra cartella per fare una copia.")
+                return
             self.table.save(path)
 
     def open_file(self):
