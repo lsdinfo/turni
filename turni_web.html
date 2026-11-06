@@ -1136,8 +1136,8 @@ function wkOpen() {
   save();
   wk.months = {};
   try { wk.store = JSON.parse(localStorage.getItem(WEEK_KEY)) || {}; } catch (e) { wk.store = {}; }
-  const d = new Date(state.year, state.month - 1, Math.min(today.getDate(), ndays()));
-  wk.monday = addDays(d, -((d.getDay() + 6) % 7));
+  const d = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  wk.monday = addDays(d, 7 - ((d.getDay() + 6) % 7));
   $("wk").style.display = "block";
   wkRender();
 }

@@ -948,7 +948,7 @@ class WeeklyDialog(QDialog):
                     self.store = json.load(f)
             except (OSError, ValueError):
                 self.store = {}
-        self.monday = start - datetime.timedelta(days=start.weekday())
+        self.monday = start + datetime.timedelta(days=7 - start.weekday())
         lay = QVBoxLayout(self)
         top = QHBoxLayout()
         b_prev = QPushButton("\u25c0")
@@ -1632,7 +1632,7 @@ def is_weekend_date(d):
 class Win(QMainWindow):
     def weekly(self):
         self.table.save()
-        d = datetime.date(YEAR, MONTH, min(datetime.date.today().day, NDAYS))
+        d = datetime.date.today()
         WeeklyDialog(self, d).exec()
 
     def prog_changed(self, _it):
