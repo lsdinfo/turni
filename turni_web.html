@@ -232,6 +232,7 @@ const ym = () => `${state.year}_${String(state.month).padStart(2, "0")}`;
 const storeKey = () => `turni_${ym()}`;
 const weekday = (d) => (new Date(state.year, state.month - 1, d).getDay() + 6) % 7;
 
+function fmtG(n) { return String(n).replace(".", ","); }
 function parseHours(t) {
   t = t.trim().replace(",", ".");
   let v;
@@ -298,7 +299,7 @@ function calcRow(i) {
     }
     let n = (e.g || []).length;
     if (merged) n = Math.min(n, 1);
-    ngett += n;
+    ngett += merged ? n : n * 0.5;
     total -= n * (merged ? HOURS[e.m] : GETTONE_H);
   }
   return { total, ngett };
@@ -532,7 +533,7 @@ function contextMenu(i, d, half, x, y) {
     }
   } else {
     const g = (e.g || []).includes(half);
-    items.push({ label: g ? "Rimuovi gettone" : `Converti in gettone # (-${fmt(GETTONE_H)}h)`,
+    items.push({ label: g ? "Rimuovi gettone" : `Converti in mezzo gettone # (-${fmt(GETTONE_H)}h)`,
       disabled: BLOCK.includes(e[half]), action: () => toggleGettone(i, d, half) });
   }
   items.push({ label: "Elimina turno", action: () => deleteShift(i, d, half) });
@@ -623,7 +624,7 @@ function summaryDialog() {
       else if (isWeekend(d) && (e.m || e.p) && !BLOCK.includes(e.m)) fest++;
     }
     const { total, ngett } = calcRow(i);
-    const vals = [cnt.RG, cnt.AG, cnt.RN, cnt.AN, fest, ngett, ass, fmt(total), fmt(total - TARGET)];
+    const vals = [cnt.RG, cnt.AG, cnt.RN, cnt.AN, fest, fmtG(ngett), ass, fmt(total), fmt(total - TARGET)];
     rows += `<tr><td class="l">${esc(name)}</td>` + vals.map((v, c) =>
       `<td${c === 8 && total < TARGET ? ' style="color:#e00000"' : ""}>${v}</td>`).join("") + "</tr>";
   });
@@ -734,7 +735,7 @@ function render() {
     const { total, ngett } = calcRow(i);
     h += `<tr><td class="name" rowspan="2">${esc(name)}</td>`;
     for (let d = 1; d <= nd; d++) h += cellHtml(i, d, "m");
-    h += `<td class="tot${total >= TARGET ? " ok" : ""}" rowspan="2">${fmt(total)} / ${fmt(TARGET)}${ngett ? `\n${ngett} gettoni` : ""}</td></tr><tr>`;
+    h += `<td class="tot${total >= TARGET ? " ok" : ""}" rowspan="2">${fmt(total)} / ${fmt(TARGET)}${ngett ? `\n${fmtG(ngett)} ${ngett === 1 ? "gettone" : "gettoni"}` : ""}</td></tr><tr>`;
     for (let d = 1; d <= nd; d++) if (!MERGED.includes(entry(i, d).m)) h += cellHtml(i, d, "p");
     h += "</tr>";
   });
@@ -1315,7 +1316,7 @@ $("help").onclick = () => showDialog(`<div style="max-height:75vh;overflow:auto;
 <h3>Sigle e ore</h3><ul>
 <li>Mattina da sola 7 h; pomeriggio sempre 6 h; mattina + pomeriggio 12 h; guardie (RG, AG, RN, AN) 12 h.</li>
 <li>F, L.104, Agg, Mal contano 6h20 (0 h di domenica e nei festivi); "/" (riposo) 0 h.</li>
-<li>Il gettone (#) toglie 6 h su un turno singolo, 12 h su una guardia. Obiettivo mensile: 152 h.</li>
+<li>Il gettone (#) vale 12 h: sulle guardie (turno intero) toglie 12 h; su un turno singolo di mattina o pomeriggio \u00e8 un <b>mezzo gettone</b> e toglie 6 h (due mezzi gettoni, mattina + pomeriggio, fanno un gettone). Obiettivo mensile: 152 h.</li>
 <li>In fondo allo schermo, le righe SO/SOP "assegnate" e "programmate" si confrontano: diventano rosse se non coincidono. I numeri programmati si scrivono a mano.</li></ul>
 <h3>Regole automatiche</h3><ul>
 <li>RM, RG, RN, U, AG e AGP non possono essere assegnati a due medici lo stesso giorno (nel menu appare il nome di chi li ha gi\u00e0).</li>

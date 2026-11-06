@@ -45,7 +45,7 @@ MANUAL_HTML = """
 <ul>
 <li>Mattina da sola 7 h; pomeriggio sempre 6 h; mattina + pomeriggio 12 h; guardie (RG, AG, RN, AN) 12 h.</li>
 <li>F, L.104, Agg, Mal contano 6h20 (0 h di domenica e nei festivi); "/" (riposo) 0 h.</li>
-<li>Il gettone (#) toglie 6 h su un turno singolo, 12 h su una guardia. Obiettivo mensile: 152 h.</li>
+<li>Il gettone (#) vale 12 h: sulle guardie (turno intero) toglie 12 h; su un turno singolo di mattina o pomeriggio \u00e8 un <b>mezzo gettone</b> e toglie 6 h (due mezzi gettoni, mattina + pomeriggio, fanno un gettone). Obiettivo mensile: 152 h.</li>
 </ul>
 <h3>Regole automatiche</h3>
 <ul>
@@ -118,6 +118,10 @@ def day_hours(code, d):
 
 def fmt(m):
     return f"{m // 60}.{m % 60:02d}"
+
+
+def fmt_gett(n):
+    return f"{n:g}".replace(".", ",")
 
 
 def parse_hours(txt):
@@ -570,7 +574,7 @@ class Planner(QTableWidget):
             ng = len(e.get("g", ()))
             if merged:
                 ng = min(ng, 1)
-            ngett += ng
+            ngett += ng if merged else ng * 0.5
             total -= ng * (HOURS[e["m"]] if merged else GETTONE_H)
         return total, ngett
 
@@ -594,7 +598,7 @@ class Planner(QTableWidget):
                 it.setBackground(QBrush(WEEKEND if self.weekend(d) else QColor("white")))
         total, ngett = self.calc_row(i)
         t = self.item(r, COL_TOT)
-        t.setText(f"{fmt(total)} / {fmt(TARGET)}" + (f"\n{ngett} gettoni" if ngett else ""))
+        t.setText(f"{fmt(total)} / {fmt(TARGET)}" + (f"\n{fmt_gett(ngett)} {'gettone' if ngett == 1 else 'gettoni'}" if ngett else ""))
         t.setForeground(QBrush(QColor("#0a7d00" if total >= TARGET else "#000")))
         self.update_counters()
         if self.ready:
@@ -961,7 +965,7 @@ class Planner(QTableWidget):
                     return
                 menu = QMenu(self)
                 g = half in e.get("g", set())
-                a_g = menu.addAction("Rimuovi gettone" if g else f"Converti in gettone # (-{fmt(GETTONE_H)}h)")
+                a_g = menu.addAction("Rimuovi gettone" if g else f"Converti in mezzo gettone # (-{fmt(GETTONE_H)}h)")
                 a_g.setEnabled(e[half] not in BLOCK)
                 a_d = menu.addAction("Elimina turno")
                 act = menu.exec(ev.globalPosition().toPoint())
@@ -1865,7 +1869,7 @@ class Win(QMainWindow):
         tab.setEditTriggers(QAbstractItemView.NoEditTriggers)
         tab.verticalHeader().hide()
         for r, row in enumerate(rows):
-            vals = [*row[:8], fmt(row[8]), fmt(row[8] - TARGET)]
+            vals = [*row[:6], fmt_gett(row[6]), *row[7:8], fmt(row[8]), fmt(row[8] - TARGET)]
             for c, v in enumerate(vals):
                 it = QTableWidgetItem(str(v))
                 it.setTextAlignment(Qt.AlignCenter if c else Qt.AlignLeft | Qt.AlignVCenter)
