@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QTableWidget, QTableWi
                                QComboBox, QSpinBox, QDialog, QListWidget, QListWidgetItem, QHBoxLayout,
                                QPushButton, QDialogButtonBox, QLabel, QTextBrowser)
 
-APP_VERSION = "2.0"
+APP_VERSION = "3.0"
 ABOUT_HTML = f"""
 <h2>Moreno</h2>
 <p><b>Pianificatore turni medici</b><br>U.O.C. di Anestesia e Rianimazione</p>
@@ -37,6 +37,7 @@ MANUAL_HTML = """
 <li><b>Clic</b> su una casella: appare l'elenco dei turni possibili. "Altro" permette una sigla libera, con le ore da contare nel mensile (es. 6, 7:30 o 7,5).</li>
 <li><b>Tasto destro</b> su un turno: elimina il turno o aggiungi/rimuovi il gettone (#).</li>
 <li>Ferie, L.104, Mal, Agg: dopo il primo giorno scegli "-" (continua) oppure trascina il mouse verso destra sui giorni successivi.</li>
+<li><b>Scambio turni</b>: tieni premuto su un turno e trascinalo su un'altra casella (altro medico o altro giorno): i due turni si scambiano; se la casella \u00e8 vuota il turno viene spostato. Lo scambio non viene fatto se viola le regole (es. riposo dopo la notte). Si pu\u00f2 annullare con Annulla.</li>
 <li>Clic sulla riga grigia: aggiunge una nota al giorno (es. "Bimbi").</li>
 <li>Clic sull'intestazione di un giorno: imposta o rimuove un <b>festivo locale</b>.</li>
 </ul>
@@ -60,7 +61,8 @@ MANUAL_HTML = """
 </ul>
 <h3>Turno settimanale</h3>
 <ul>
-<li>Il pulsante <b>Settimanale</b> apre la settimana (luned\u00ec-domenica) con guardie, ambulatori e sale operatorie, mattina e pomeriggio.</li>
+<li>Il pulsante <b>Settimanale</b> apre la settimana (luned\u00ec-domenica) con guardie, ambulatori e sale operatorie, mattina e pomeriggio. Si apre sul luned\u00ec successivo a oggi; con le frecce cambi settimana.</li>
+<li><b>Trascinando</b> un medico su un'altra sala dello stesso giorno e turno, i due si scambiano (o il medico si sposta se la sala \u00e8 vuota).</li>
 <li>Le sale (SO al mattino, SOP al pomeriggio) si compilano da sole in base ai turni del mese; i medici si possono cambiare dal menu a scomparsa. Cliccando sul giorno in alto scegli, per mattina e pomeriggio, quali specialit\u00e0 sono attive (anche entrambe); il valore predefinito \u00e8 lo schema abituale.</li>
 <li>Un "?" rosso indica una guardia obbligatoria mancante: con un clic puoi confermare che resta scoperta ("/").</li>
 <li>Nel fine settimana il medico AG 12 ore compare sia al mattino sia al pomeriggio.</li>
