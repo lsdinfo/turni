@@ -34,7 +34,7 @@ MANUAL_HTML = """
 <h3>Inserire i turni</h3>
 <ul>
 <li>Ogni medico ha due met\u00e0 per giorno: <b>in alto mattina</b>, <b>in basso pomeriggio</b>.</li>
-<li><b>Clic</b> su una casella: appare l'elenco dei turni possibili. "Altro" permette una sigla libera.</li>
+<li><b>Clic</b> su una casella: appare l'elenco dei turni possibili. "Altro" permette una sigla libera, con le ore da contare nel mensile (es. 6, 7:30 o 7,5).</li>
 <li><b>Tasto destro</b> su un turno: elimina il turno o aggiungi/rimuovi il gettone (#).</li>
 <li>Ferie, L.104, Mal, Agg: dopo il primo giorno scegli "-" (continua) oppure trascina il mouse verso destra sui giorni successivi.</li>
 <li>Clic sulla riga grigia: aggiunge una nota al giorno (es. "Bimbi").</li>
@@ -116,6 +116,19 @@ def day_hours(code, d):
 
 def fmt(m):
     return f"{m // 60}.{m % 60:02d}"
+
+
+def parse_hours(txt):
+    txt = txt.strip().replace(",", ".")
+    try:
+        if ":" in txt:
+            h, m = txt.split(":")
+            v = int(h) * 60 + int(m)
+        else:
+            v = round(float(txt) * 60)
+    except ValueError:
+        return None
+    return v if 0 <= v <= 24 * 60 else None
 
 UNIQUE = ("RM", "RG", "RN", "AN", "U", "AG", "AGP")
 REQUIRED_WEEKDAY_ONLY = ("RM", "U", "AGP")
@@ -543,13 +556,14 @@ class Planner(QTableWidget):
                 total += day_hours(e["m"], d)
             else:
                 m, pm = e.get("m"), e.get("p")
-                mh = HOURS.get(m, 0)
+                hrs = e.get("hrs", {})
+                mh = hrs["m"] if m not in HOURS and "m" in hrs else HOURS.get(m, 0)
                 if pm in PM_CODES:
                     ph = 6 * 60
                     if m in MORNING:
                         mh = 6 * 60
                 else:
-                    ph = HOURS.get(pm, 0)
+                    ph = hrs["p"] if pm not in HOURS and "p" in hrs else HOURS.get(pm, 0)
                 total += mh + ph
             ng = len(e.get("g", ()))
             if merged:
@@ -666,12 +680,24 @@ class Planner(QTableWidget):
         act = menu.exec(self.viewport().mapToGlobal(pos))
         if act:
             code = act.data()
+            minutes = None
             if code == CUSTOM:
                 code, ok = QInputDialog.getText(self, "Sigla libera", "Sigla:")
                 code = code.strip()
                 if not ok or not code:
                     return
+                if code not in HOURS:
+                    txt, ok = QInputDialog.getText(self, "Durata", "Ore per il conteggio mensile\n(es. 6, 7:30 oppure 7,5):", text="0")
+                    if not ok:
+                        return
+                    minutes = parse_hours(txt)
+                    if minutes is None:
+                        QMessageBox.information(self, "Durata", "Formato ore non valido.")
+                        return
             self.assign(i, d, half, code)
+            if minutes is not None and half in self.entry(i, d):
+                self.data[(i, d)].setdefault("hrs", {})[half] = minutes
+                self.refresh_row(i)
 
     def snapshot(self, with_prog=False):
         prog = None

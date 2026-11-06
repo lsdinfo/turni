@@ -232,6 +232,12 @@ const ym = () => `${state.year}_${String(state.month).padStart(2, "0")}`;
 const storeKey = () => `turni_${ym()}`;
 const weekday = (d) => (new Date(state.year, state.month - 1, d).getDay() + 6) % 7;
 
+function parseHours(t) {
+  t = t.trim().replace(",", ".");
+  let v;
+  if (t.includes(":")) { const [h, m] = t.split(":"); v = (+h) * 60 + (+m); } else v = Math.round(parseFloat(t) * 60);
+  return Number.isFinite(v) && v >= 0 && v <= 1440 ? v : null;
+}
 function fmt(m) {
   const s = m < 0 ? "-" : "";
   m = Math.abs(m);
@@ -281,12 +287,12 @@ function calcRow(i) {
     if (has(FULL, e.m) || BLOCK.includes(e.m)) {
       total += dayHours(e.m, d);
     } else {
-      let mh = HOURS[e.m] ?? 0, ph;
+      let mh = (!has(HOURS, e.m) && e.hrs && "m" in e.hrs) ? e.hrs.m : (HOURS[e.m] ?? 0), ph;
       if (PM_CODES.has(e.p)) {
         ph = 6 * 60;
         if (has(MORNING, e.m)) mh = 6 * 60;
       } else {
-        ph = HOURS[e.p] ?? 0;
+        ph = (!has(HOURS, e.p) && e.hrs && "p" in e.hrs) ? e.hrs.p : (HOURS[e.p] ?? 0);
       }
       total += mh + ph;
     }
@@ -500,7 +506,16 @@ function cellMenu(i, d, half, x, y) {
   });
   items.push("sep", { label: "Altro (sigla libera)...", action: () => {
     const c = (prompt("Sigla:") || "").trim();
-    if (c) assign(i, d, half, c);
+    if (!c) return;
+    let mins = null;
+    if (!has(HOURS, c)) {
+      const t = prompt("Ore per il conteggio mensile (es. 6, 7:30 oppure 7,5):", "0");
+      if (t === null) return;
+      mins = parseHours(t);
+      if (mins === null) { alert("Formato ore non valido."); return; }
+    }
+    assign(i, d, half, c);
+    if (mins !== null && half in entry(i, d)) { ((entry(i, d).hrs ||= {}))[half] = mins; changed(); }
   } });
   showMenu(x, y, items);
 }
@@ -1257,7 +1272,7 @@ $("help").onclick = () => showDialog(`<div style="max-height:75vh;overflow:auto;
 <h2 style="margin-top:0">Manuale rapido</h2>
 <h3>Inserire i turni</h3><ul>
 <li>Ogni medico ha due met\u00e0 per giorno: <b>in alto mattina</b>, <b>in basso pomeriggio</b>.</li>
-<li><b>Clic</b> su una casella: appare l'elenco dei turni possibili. "Altro" permette una sigla libera.</li>
+<li><b>Clic</b> su una casella: appare l'elenco dei turni possibili. "Altro" permette una sigla libera, con le ore da contare nel mensile (es. 6, 7:30 o 7,5).</li>
 <li><b>Tasto destro</b> su un turno: elimina il turno o aggiungi/rimuovi il gettone (#).</li>
 <li>Ferie, L.104, Mal, Agg: dopo il primo giorno scegli "-" (continua) oppure trascina il mouse verso destra sui giorni successivi.</li>
 <li>Clic sulla riga grigia: aggiunge una nota al giorno (es. "Bimbi").</li>
