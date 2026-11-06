@@ -37,7 +37,7 @@ MANUAL_HTML = """
 <li><b>Clic</b> su una casella: appare l'elenco dei turni possibili. "Altro" permette una sigla libera, con le ore da contare nel mensile (es. 6, 7:30 o 7,5).</li>
 <li><b>Tasto destro</b> su un turno: elimina il turno o aggiungi/rimuovi il gettone (#).</li>
 <li>Ferie, L.104, Mal, Agg: dopo il primo giorno scegli "-" (continua) oppure trascina il mouse verso destra sui giorni successivi.</li>
-<li><b>Scambio turni</b>: tieni premuto su un turno e trascinalo su un'altra casella (altro medico o altro giorno): i due turni si scambiano; se la casella \u00e8 vuota il turno viene spostato. Lo scambio non viene fatto se viola le regole (es. riposo dopo la notte). Si pu\u00f2 annullare con Annulla.</li>
+<li><b>Scambio turni</b>: tieni premuto su un turno e trascinalo su un'altra casella (altro medico o altro giorno): i due turni si scambiano; se la casella \u00e8 vuota il turno viene spostato. Se il turno ha mattina e pomeriggio separati (es. SO + SOP), si sposta solo la met\u00e0 che trascini: scambia con la met\u00e0 su cui rilasci. Lo scambio non viene fatto se viola le regole (es. riposo dopo la notte). Si pu\u00f2 annullare con Annulla.</li>
 <li>Clic sulla riga grigia: aggiunge una nota al giorno (es. "Bimbi").</li>
 <li>Clic sull'intestazione di un giorno: imposta o rimuove un <b>festivo locale</b>.</li>
 </ul>
@@ -824,6 +824,67 @@ class Planner(QTableWidget):
         if j != i:
             self.refresh_row(j)
 
+    def half_allows(self, half, code):
+        if code not in HOURS:
+            return True
+        return code in MORNING if half == "m" else code in PM_CODES
+
+    def swap_halves(self, a, b):
+        (i, d, h), (j, d2, h2) = a, b
+        ea, eb = self.entry(i, d), self.entry(j, d2)
+        if h not in ea:
+            return
+        if ea.get("cont") or eb.get("cont") or eb.get("m") in (*MERGED, *FULL):
+            QMessageBox.information(self, "Scambio", "Scambio non possibile: la casella di arrivo ha un turno intero o su più giorni.")
+            return
+        ca, cb = ea[h], eb.get(h2)
+        if not self.half_allows(h2, ca) or (cb is not None and not self.half_allows(h, cb)):
+            QMessageBox.information(self, "Scambio", "Scambio non possibile: la sigla non è ammessa in quella metà del giorno.")
+            return
+        before = self.snapshot()
+        self.push_undo()
+
+        def take(e, half):
+            g = half in e.get("g", set())
+            hr = e.get("hrs", {}).get(half)
+            return g, hr
+
+        ta, tb = take(ea, h), take(eb, h2)
+
+        def clear(e, half):
+            e.pop(half, None)
+            e.get("g", set()).discard(half)
+            e.get("hrs", {}).pop(half, None)
+
+        def put(e, half, code, t):
+            if code is None:
+                return
+            e[half] = code
+            if t[0]:
+                e.setdefault("g", set()).add(half)
+            if t[1] is not None:
+                e.setdefault("hrs", {})[half] = t[1]
+
+        ea = self.data.setdefault((i, d), {})
+        eb = self.data.setdefault((j, d2), {})
+        clear(ea, h)
+        clear(eb, h2)
+        put(eb, h2, ca, ta)
+        put(ea, h, cb, tb)
+        for k in ((i, d), (j, d2)):
+            e = self.data[k]
+            if not (e.get("m") or e.get("p")):
+                del self.data[k]
+        if not all(self.valid_cell(x, y) for x, y in ((i, d), (j, d2), (i, d + 1), (j, d2 + 1))):
+            self.data = before[0]
+            self.undo_stack.pop()
+            QMessageBox.information(self, "Scambio", "Scambio non consentito dalle regole "
+                                    "(riposo dopo notte o turno non ammesso nel giorno).")
+            return
+        self.refresh_row(i)
+        if j != i:
+            self.refresh_row(j)
+
     def mouseReleaseEvent(self, ev):
         start, self.drag_start = self.drag_start, None
         src, self.drag_src = self.drag_src, None
@@ -832,8 +893,11 @@ class Planner(QTableWidget):
             info = self.cell_info(idx.row(), idx.column())
             if info and start and info[0] == start[0] and info[1] > start[1]:
                 self.fill_continue(start[0], start[1], info[1])
-            elif info and src and (info[0], info[1]) != src:
-                self.swap_entries(src, (info[0], info[1]))
+            elif info and src and info != src:
+                if self.entry(src[0], src[1]).get("m") in (*MERGED, *FULL):
+                    self.swap_entries(src[:2], info[:2])
+                else:
+                    self.swap_halves(src, info)
         super().mouseReleaseEvent(ev)
 
     def save(self, path=None):
@@ -925,7 +989,7 @@ class Planner(QTableWidget):
             if info and self.entry(info[0], info[1]).get("m") in CONTINUABLE:
                 self.drag_start = (info[0], info[1])
             if info and self.entry(info[0], info[1]):
-                self.drag_src = (info[0], info[1])
+                self.drag_src = info
         super().mousePressEvent(ev)
 
 

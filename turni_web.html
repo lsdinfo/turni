@@ -818,6 +818,39 @@ function swapEntries(a, b) {
   pushUndo(before);
   changed();
 }
+function halfAllows(half, code) {
+  if (!has(HOURS, code)) return true;
+  return half === "m" ? has(MORNING, code) : PM_CODES.has(code);
+}
+function swapHalves(a, b) {
+  const ea = entry(a.i, a.d), eb = entry(b.i, b.d), h = a.h, h2 = b.h;
+  if (!(h in ea)) return;
+  if (ea.cont || eb.cont || MERGED.includes(eb.m) || has(FULL, eb.m)) { status("Scambio non possibile: la casella di arrivo ha un turno intero o su più giorni"); return; }
+  const ca = ea[h], cb = eb[h2];
+  if (!halfAllows(h2, ca) || (cb !== undefined && !halfAllows(h, cb))) { status("Scambio non possibile: la sigla non è ammessa in quella metà del giorno"); return; }
+  const before = snap();
+  const take = (e, half) => ({ g: (e.g || []).includes(half), hr: e.hrs && half in e.hrs ? e.hrs[half] : undefined });
+  const ta = take(ea, h), tb = take(eb, h2);
+  const clear = (e, half) => { delete e[half]; e.g = (e.g || []).filter((x) => x !== half); if (e.hrs) delete e.hrs[half]; };
+  const put = (e, half, code, t) => {
+    if (code === undefined) return;
+    e[half] = code;
+    if (t.g) e.g = [...(e.g || []), half];
+    if (t.hr !== undefined) (e.hrs ||= {})[half] = t.hr;
+  };
+  const xa = entry(a.i, a.d), xb = entry(b.i, b.d);
+  setEntry(a.i, a.d, xa); setEntry(b.i, b.d, xb);
+  clear(xa, h); clear(xb, h2);
+  put(xb, h2, ca, ta); put(xa, h, cb, tb);
+  for (const [i, d] of [[a.i, a.d], [b.i, b.d]]) if (isEmpty(entry(i, d))) delEntry(i, d);
+  if (![[a.i, a.d], [b.i, b.d], [a.i, a.d + 1], [b.i, b.d + 1]].every(([i, d]) => validCell(i, d))) {
+    Object.assign(state, before);
+    status("Scambio non consentito dalle regole (riposo dopo notte o turno non ammesso nel giorno)");
+    return;
+  }
+  pushUndo(before);
+  changed();
+}
 document.addEventListener("mouseup", (ev) => {
   const start = dragStart, src = dragSrc;
   dragStart = dragSrc = null;
@@ -828,10 +861,11 @@ document.addEventListener("mouseup", (ev) => {
     suppressClick = true;
     setTimeout(() => { suppressClick = false; }, 50);
     fillContinue(start.i, start.d, c.d);
-  } else if (src && (c.i !== src.i || c.d !== src.d)) {
+  } else if (src && (c.i !== src.i || c.d !== src.d || c.h !== src.h)) {
     suppressClick = true;
     setTimeout(() => { suppressClick = false; }, 50);
-    swapEntries(src, c);
+    const m = entry(src.i, src.d).m;
+    if (MERGED.includes(m) || has(FULL, m)) swapEntries(src, c); else swapHalves(src, c);
   }
 });
 $("grid").addEventListener("click", (ev) => {
@@ -1275,7 +1309,7 @@ $("help").onclick = () => showDialog(`<div style="max-height:75vh;overflow:auto;
 <li><b>Clic</b> su una casella: appare l'elenco dei turni possibili. "Altro" permette una sigla libera, con le ore da contare nel mensile (es. 6, 7:30 o 7,5).</li>
 <li><b>Tasto destro</b> su un turno: elimina il turno o aggiungi/rimuovi il gettone (#).</li>
 <li>Ferie, L.104, Mal, Agg: dopo il primo giorno scegli "-" (continua) oppure trascina il mouse verso destra sui giorni successivi.</li>
-<li><b>Scambio turni</b>: tieni premuto su un turno e trascinalo su un'altra casella (altro medico o altro giorno): i due turni si scambiano; se la casella \u00e8 vuota il turno viene spostato. Lo scambio non viene fatto se viola le regole (es. riposo dopo la notte). Si pu\u00f2 annullare con Ctrl+Z.</li>
+<li><b>Scambio turni</b>: tieni premuto su un turno e trascinalo su un'altra casella (altro medico o altro giorno): i due turni si scambiano; se la casella \u00e8 vuota il turno viene spostato. Se il turno ha mattina e pomeriggio separati (es. SO + SOP), si sposta solo la met\u00e0 che trascini: scambia con la met\u00e0 su cui rilasci. Lo scambio non viene fatto se viola le regole (es. riposo dopo la notte). Si pu\u00f2 annullare con Ctrl+Z.</li>
 <li>Clic sulla riga grigia: aggiunge una nota al giorno (es. "Bimbi").</li>
 <li>Clic sull'intestazione di un giorno: imposta o rimuove un <b>festivo locale</b>.</li></ul>
 <h3>Sigle e ore</h3><ul>
