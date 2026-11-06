@@ -236,7 +236,7 @@ class Planner(QTableWidget):
         self.ready = False
         self.footer = None
         self.drag_start = None
-        self.hover = None
+        self.drag_src = None
         self.timer = QTimer(self, singleShot=True, interval=350)
         self.timer.timeout.connect(self.open_menu)
         self.setMouseTracking(True)
@@ -619,7 +619,7 @@ class Planner(QTableWidget):
             return 0
     def on_enter(self, row, col):
         self.hover = (row, col)
-        if not self.drag_start:
+        if not self.drag_start and not self.drag_src:
             self.timer.start()
 
     def leaveEvent(self, ev):
@@ -758,13 +758,54 @@ class Planner(QTableWidget):
             self.data[(i, d)] = {"m": code, "p": code, "cont": True}
         self.refresh_row(i)
 
+    def valid_cell(self, i, d):
+        if d > NDAYS:
+            return True
+        e = self.entry(i, d)
+        if not e:
+            return True
+        bad = REQUIRED_WEEKDAY_ONLY if self.weekend(d) else REQUIRED_OFFDAY_ONLY
+        codes = [x for x in (e.get("m"), e.get("p")) if x]
+        if any(x in bad for x in codes):
+            return False
+        return not self.after_night(i, d) or all(x == "/" or x in NIGHT_GUARD for x in codes)
+
+    def swap_entries(self, a, b):
+        (i, d), (j, d2) = a, b
+        ea, eb = self.entry(i, d), self.entry(j, d2)
+        if not ea or (i, d) == (j, d2):
+            return
+        if ea.get("cont") or eb.get("cont") or self.entry(i, d + 1).get("cont") or self.entry(j, d2 + 1).get("cont"):
+            QMessageBox.information(self, "Scambio", "Scambio non possibile: turno su più giorni.")
+            return
+        before = self.snapshot()
+        self.push_undo()
+        ea, eb = copy.deepcopy(ea), copy.deepcopy(eb)
+        if eb:
+            self.data[(i, d)] = eb
+        else:
+            self.data.pop((i, d), None)
+        self.data[(j, d2)] = ea
+        if not all(self.valid_cell(x, y) for x, y in ((i, d), (j, d2), (i, d + 1), (j, d2 + 1))):
+            self.data = before[0]
+            self.undo_stack.pop()
+            QMessageBox.information(self, "Scambio", "Scambio non consentito dalle regole "
+                                    "(riposo dopo notte o turno non ammesso nel giorno).")
+            return
+        self.refresh_row(i)
+        if j != i:
+            self.refresh_row(j)
+
     def mouseReleaseEvent(self, ev):
         start, self.drag_start = self.drag_start, None
-        if start and ev.button() == Qt.LeftButton:
+        src, self.drag_src = self.drag_src, None
+        if ev.button() == Qt.LeftButton and (start or src):
             idx = self.indexAt(ev.position().toPoint())
             info = self.cell_info(idx.row(), idx.column())
-            if info and info[0] == start[0] and info[1] > start[1]:
+            if info and start and info[0] == start[0] and info[1] > start[1]:
                 self.fill_continue(start[0], start[1], info[1])
+            elif info and src and (info[0], info[1]) != src:
+                self.swap_entries(src, (info[0], info[1]))
         super().mouseReleaseEvent(ev)
 
     def save(self, path=None):
@@ -855,6 +896,8 @@ class Planner(QTableWidget):
             info = self.cell_info(idx.row(), idx.column())
             if info and self.entry(info[0], info[1]).get("m") in CONTINUABLE:
                 self.drag_start = (info[0], info[1])
+            if info and self.entry(info[0], info[1]):
+                self.drag_src = (info[0], info[1])
         super().mousePressEvent(ev)
 
 

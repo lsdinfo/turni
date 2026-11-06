@@ -223,7 +223,7 @@ const today = new Date();
 const state = { year: today.getFullYear(), month: today.getMonth() + 1, data: {}, notes: {}, hol: {}, prog: { SO: {}, SOP: {} } };
 const undoStack = [];
 const lastBackup = {};
-let dragStart = null, suppressClick = false, pendingProg = null;
+let dragStart = null, dragSrc = null, suppressClick = false, pendingProg = null;
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -777,16 +777,46 @@ $("grid").addEventListener("mousedown", (ev) => {
   if (ev.button !== 0) return;
   const c = cellOf(ev);
   dragStart = c && CONTINUABLE.includes(entry(c.i, c.d).m) ? c : null;
+  dragSrc = c && !isEmpty(entry(c.i, c.d)) ? c : null;
 });
+function validCell(i, d) {
+  if (d > ndays()) return true;
+  const e = entry(i, d);
+  if (isEmpty(e)) return true;
+  const bad = isWeekend(d) ? REQUIRED_WEEKDAY_ONLY : REQUIRED_OFFDAY_ONLY;
+  const codes = [e.m, e.p].filter(Boolean);
+  if (codes.some((x) => bad.includes(x))) return false;
+  return !afterNight(i, d) || codes.every((x) => x === "/" || has(NIGHT_GUARD, x));
+}
+function swapEntries(a, b) {
+  const ea = entry(a.i, a.d), eb = entry(b.i, b.d);
+  if (isEmpty(ea) || (a.i === b.i && a.d === b.d)) return;
+  if (ea.cont || eb.cont || entry(a.i, a.d + 1).cont || entry(b.i, b.d + 1).cont) { status("Scambio non possibile: turno su più giorni"); return; }
+  const before = snap(), A = JSON.parse(JSON.stringify(ea)), B = JSON.parse(JSON.stringify(eb));
+  if (isEmpty(eb)) delEntry(a.i, a.d); else setEntry(a.i, a.d, B);
+  setEntry(b.i, b.d, A);
+  if (![[a.i, a.d], [b.i, b.d], [a.i, a.d + 1], [b.i, b.d + 1]].every(([i, d]) => validCell(i, d))) {
+    Object.assign(state, before);
+    status("Scambio non consentito dalle regole (riposo dopo notte o turno non ammesso nel giorno)");
+    return;
+  }
+  pushUndo(before);
+  changed();
+}
 document.addEventListener("mouseup", (ev) => {
-  const start = dragStart;
-  dragStart = null;
-  if (!start || ev.button !== 0) return;
+  const start = dragStart, src = dragSrc;
+  dragStart = dragSrc = null;
+  if (ev.button !== 0) return;
   const c = cellOf(ev);
-  if (c && c.i === start.i && c.d > start.d) {
+  if (!c) return;
+  if (start && c.i === start.i && c.d > start.d) {
     suppressClick = true;
     setTimeout(() => { suppressClick = false; }, 50);
     fillContinue(start.i, start.d, c.d);
+  } else if (src && (c.i !== src.i || c.d !== src.d)) {
+    suppressClick = true;
+    setTimeout(() => { suppressClick = false; }, 50);
+    swapEntries(src, c);
   }
 });
 $("grid").addEventListener("click", (ev) => {
